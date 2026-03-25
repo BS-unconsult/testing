@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Portfolio Prioritisation Tool v2</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'DM Sans', system-ui, sans-serif; background: #f4f5f7; color: #1a1a2e; min-height: 100vh; }
+.app { max-width: 900px; margin: 0 auto; padding: 20px; }
+.card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden; }
+.gate-overlay { position: fixed; inset: 0; background: rgba(244,245,247,0.92); backdrop-filter: blur(10px); display: flex; align-items: center; justify-content: center; z-index: 999; }
+.gate-box { background: #fff; border-radius: 16px; padding: 40px; max-width: 400px; width: 90%; text-align: center; border: 1px solid #e5e7eb; box-shadow: 0 16px 48px rgba(0,0,0,0.08); }
+.gate-box h2 { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+.gate-box .sub { font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; color: #9ca3af; font-weight: 600; margin-bottom: 12px; }
+.gate-box p { font-size: 13px; color: #6b7280; line-height: 1.6; margin-bottom: 20px; }
+.gate-input { width: 100%; padding: 12px; border: 1.5px solid #e5e7eb; border-radius: 8px; font-size: 15px; text-align: center; letter-spacing: 0.12em; font-family: inherit; background: #f9fafb; }
+.gate-input:focus { outline: none; border-color: #0891b2; }
+.gate-btn { width: 100%; padding: 12px; background: #1a1a2e; color: #fff; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; margin-top: 10px; font-family: inherit; }
+.gate-btn:hover { background: #2d2d4e; }
+.gate-err { font-size: 12px; color: #dc2626; margin-top: 8px; display: none; }
+.topbar { padding: 16px 24px; background: #f9fafb; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+.topbar-title { font-size: 16px; font-weight: 700; }
+.topbar-sub { font-size: 11px; color: #9ca3af; }
+.topbar-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.12em; color: #9ca3af; margin-bottom: 2px; }
+.badge { padding: 3px 10px; border-radius: 12px; font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; background: #f3f4f6; color: #9ca3af; border: 1px solid #e5e7eb; }
+.btn-reset { padding: 5px 12px; border: 1px solid #e5e7eb; border-radius: 6px; background: #fff; color: #6b7280; font-size: 11px; cursor: pointer; font-family: inherit; }
+.btn-reset:hover { border-color: #9ca3af; }
+.content { padding: 24px; }
+.steps-bar { display: flex; gap: 3px; margin-bottom: 20px; }
+.step-pip { flex: 1; height: 4px; border-radius: 2px; background: #f3f4f6; transition: background 0.3s; }
+.step-pip.done { background: #059669; }
+.step-pip.active { background: linear-gradient(90deg, #0891b2, #059669); }
+.step-tabs { display: flex; gap: 4px; margin-bottom: 20px; overflow-x: auto; }
+.step-tab { padding: 7px 12px; border-radius: 6px; border: 1.5px solid #e5e7eb; background: #fff; color: #9ca3af; font-size: 11px; font-weight: 600; cursor: pointer; white-space: nowrap; font-family: inherit; }
+.step-tab:hover { border-color: #6b7280; color: #6b7280; }
+.step-tab.active { background: #1a1a2e; color: #fff; border-color: #1a1a2e; }
+.step-tab.done { border-color: #059669; color: #059669; }
+.step-tab.locked { opacity: 0.4; cursor: not-allowed; }
+.sec-head { font-size: 18px; font-weight: 700; margin-bottom: 4px; letter-spacing: -0.02em; }
+.sec-sub { font-size: 12px; color: #6b7280; line-height: 1.5; margin-bottom: 16px; }
+.field-label { font-size: 11px; font-weight: 600; color: #6b7280; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.06em; }
+.field-input { width: 100%; padding: 10px 12px; border: 1.5px solid #e5e7eb; border-radius: 8px; font-size: 13px; font-family: inherit; background: #fff; color: #1a1a2e; }
+.field-input:focus { outline: none; border-color: #0891b2; }
+.field-input::placeholder { color: #c4c4c4; }
+textarea.field-input { min-height: 50px; resize: vertical; line-height: 1.5; }
+select.field-input { cursor: pointer; }
+.icard { background: #fff; border: 1.5px solid #e5e7eb; border-radius: 10px; padding: 16px; margin-bottom: 8px; }
+.icard:hover { border-color: #9ca3af; }
+.nav-row { display: flex; justify-content: space-between; gap: 12px; margin-top: 20px; }
+.btn { padding: 10px 24px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; border: none; }
+.btn-pri { background: #1a1a2e; color: #fff; }
+.btn-pri:hover { background: #2d2d4e; }
+.btn-pri:disabled { opacity: 0.3; cursor: not-allowed; }
+.btn-sec { background: #fff; color: #6b7280; border: 1.5px solid #e5e7eb; }
+.btn-sec:hover { border-color: #6b7280; }
+.btn-sm { padding: 6px 14px; font-size: 11px; }
+.btn-danger { background: #fff; color: #dc2626; border: 1.5px solid #fecaca; }
+.btn-danger:hover { background: #fef2f2; }
+.btn-green { background: #059669; color: #fff; }
+.btn-green:hover { background: #047857; }
+.btn-teal { background: #0891b2; color: #fff; }
+.btn-teal:hover { background: #0e7490; }
+.empty-state { text-align: center; padding: 40px 20px; color: #9ca3af; }
+.empty-state .icon { font-size: 32px; margin-bottom: 8px; }
+.empty-state p { font-size: 13px; line-height: 1.6; }
+.tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 600; font-family: 'JetBrains Mono', monospace; }
+.tag-run { background: #eff6ff; color: #2563eb; }
+.tag-change { background: #f5f3ff; color: #7c3aed; }
+.tag-challenge { background: #fffbeb; color: #d97706; }
+.tag-green { background: #ecfdf5; color: #059669; }
+.tag-amber { background: #fffbeb; color: #d97706; }
+.tag-red { background: #fef2f2; color: #dc2626; }
+.tag-grey { background: #f3f4f6; color: #6b7280; }
+.mono { font-family: 'JetBrains Mono', monospace; }
+.crit-item { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #fff; border: 1.5px solid #e5e7eb; border-radius: 8px; margin-bottom: 6px; }
+.crit-item .cname { flex: 1; font-size: 13px; font-weight: 500; }
+.crit-weight { width: 60px; padding: 5px 8px; border: 1.5px solid #e5e7eb; border-radius: 6px; font-size: 13px; font-family: 'JetBrains Mono', monospace; text-align: center; }
+.crit-weight:focus { outline: none; border-color: #0891b2; }
+.crit-remove { width: 28px; height: 28px; border-radius: 6px; border: 1px solid #e5e7eb; background: #fff; color: #d1d5db; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.crit-remove:hover { border-color: #fecaca; color: #dc2626; background: #fef2f2; }
+.sg-input { width: 44px; padding: 6px; border: 1.5px solid #e5e7eb; border-radius: 6px; font-size: 13px; font-family: 'JetBrains Mono', monospace; text-align: center; background: #fff; }
+.sg-input:focus { outline: none; border-color: #0891b2; }
+.pool-section { border: 1.5px solid #e5e7eb; border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+.pool-head { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.pool-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.pool-name { font-size: 14px; font-weight: 700; }
+.pool-count { font-size: 11px; color: #9ca3af; }
+.port-item { display: flex; align-items: center; gap: 12px; padding: 12px; background: #f9fafb; border-radius: 8px; margin-bottom: 6px; }
+.port-rank { width: 28px; height: 28px; border-radius: 6px; background: #1a1a2e; color: #fff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; font-family: 'JetBrains Mono', monospace; flex-shrink: 0; }
+.port-info { flex: 1; min-width: 0; }
+.port-name { font-size: 13px; font-weight: 600; margin-bottom: 2px; }
+.port-meta { font-size: 10px; color: #9ca3af; display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+.port-score { font-size: 16px; font-weight: 700; font-family: 'JetBrains Mono', monospace; color: #059669; flex-shrink: 0; }
+.port-bar { height: 3px; background: #f3f4f6; border-radius: 2px; margin-top: 4px; }
+.port-bar-fill { height: 100%; border-radius: 2px; background: linear-gradient(90deg, #0891b2, #059669); }
+.info-box { background: #f9fafb; border-left: 3px solid #0891b2; border-radius: 0 8px 8px 0; padding: 12px 14px; margin-bottom: 16px; }
+.info-box p { font-size: 12px; color: #6b7280; line-height: 1.5; }
+.info-box .title { font-size: 11px; font-weight: 700; color: #0891b2; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
+.cta-box { background: #f9fafb; border-left: 3px solid #1a1a2e; border-radius: 10px; padding: 20px; margin-top: 24px; }
+.cta-link { display: inline-block; margin-top: 10px; padding: 10px 24px; background: #1a1a2e; color: #fff; border-radius: 20px; font-size: 13px; font-weight: 700; text-decoration: none; }
+.cta-link:hover { background: #2d2d4e; }
+.lock-badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 600; }
+.lock-locked { background: #ecfdf5; color: #059669; }
+.class-card { padding: 14px; border-radius: 10px; border: 2px solid #e5e7eb; cursor: pointer; text-align: center; transition: all 0.15s; }
+.class-card:hover { border-color: #9ca3af; }
+.class-card.selected { border-width: 2px; }
+.class-card h4 { font-size: 13px; font-weight: 700; margin-bottom: 2px; }
+.class-card p { font-size: 10px; color: #6b7280; line-height: 1.4; }
+@media (max-width: 600px) { .content { padding: 16px; } .step-tabs { gap: 3px; } .step-tab { padding: 6px 8px; font-size: 10px; } }
+</style>
+</head>
+<body>
+<div class="app"><div class="card">
+  <div id="gate" class="gate-overlay"><div class="gate-box">
+    <div class="sub">UnConsult</div><h2>Portfolio Prioritisation Tool</h2>
+    <p>This tool is in private beta. Enter the access code to continue.</p>
+    <input class="gate-input" type="password" id="pw" placeholder="Access code" autocomplete="off">
+    <button class="gate-btn" id="gate-btn">Enter</button>
+    <div class="gate-err" id="gate-err">That code is not recognised. Please try again.</div>
+  </div></div>
+  <div id="main" style="display:none">
+    <div class="topbar"><div>
+      <div class="topbar-label">UnConsult</div>
+      <div class="topbar-title">Portfolio Prioritisation Tool</div>
+      <div class="topbar-sub">Classify, compare like with like, and make decisions that stick</div>
+    </div><div style="display:flex;gap:8px;align-items:center">
+      <button class="btn-reset" id="reset-btn">Reset</button><div class="badge">Beta v2</div>
+    </div></div>
+    <div class="content" id="view"></div>
+  </div>
+</div></div>
+<script>
+(function(){
+var CODE='unconsult2026';
+var STEPS=[{id:'intro',name:'Start'},{id:'pools',name:'Pools'},{id:'initiatives',name:'Initiatives'},{id:'criteria',name:'Criteria'},{id:'scoring',name:'Scoring'},{id:'portfolio',name:'Portfolio'}];
+var CLASS_META={
+  run:{label:'Run',color:'#2563eb',bg:'#eff6ff',tag:'tag-run',desc:'Mandatory. Routine core work. Standardised for consistency.',gov:'Team-level monitoring. Only enters central queue if new budget or tech required.'},
+  change:{label:'Change',color:'#7c3aed',bg:'#f5f3ff',tag:'tag-change',desc:'Optional but foundational. Once-off or cyclical transformation.',gov:'Always enters central queue. Scored against criteria within constraint pool.'},
+  challenge:{label:'Challenge',color:'#d97706',bg:'#fffbeb',tag:'tag-challenge',desc:'Opportunity-driven. Time-bound campaigns, projects, programmes.',gov:'Always enters central queue. Assessed on opportunity window and mobilisation readiness.'}
+};
+var EXAMPLE_CRITERIA=['Mission alignment','Impact potential','Reach','Strategic value','Ease of engagement','Comparative advantage','Financial viability','Urgency','Mobilisation readiness'];
+var POOL_COLORS=['#0891b2','#7c3aed','#d97706','#2563eb','#059669','#dc2626'];
+
+var screen='intro',pools=[],initiatives=[],criteria=[],scores={},decisions={},idC=1,critC=1,poolC=1;
+var viewEl,gateEl,mainEl;
+
+window.onload=function(){
+  viewEl=document.getElementById('view');gateEl=document.getElementById('gate');mainEl=document.getElementById('main');
+  document.getElementById('gate-btn').onclick=function(){
+    if(document.getElementById('pw').value.trim().toLowerCase()===CODE){gateEl.style.display='none';mainEl.style.display='block';draw();}
+    else document.getElementById('gate-err').style.display='block';
+  };
+  document.getElementById('pw').onkeydown=function(e){if(e.key==='Enter')document.getElementById('gate-btn').click();};
+  document.getElementById('reset-btn').onclick=function(){if(confirm('Reset everything?')){screen='intro';pools=[];initiatives=[];criteria=[];scores={};decisions={};idC=1;critC=1;poolC=1;draw();}};
+};
+
+function draw(){
+  var fn={intro:introHTML,pools:poolsHTML,initiatives:initHTML,criteria:critHTML,scoring:scoreHTML,portfolio:portHTML};
+  viewEl.innerHTML=(fn[screen]||introHTML)();
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function si(){for(var i=0;i<STEPS.length;i++)if(STEPS[i].id===screen)return i;return 0;}
+function stepsH(){
+  var ci=si(),h='<div class="steps-bar">';
+  for(var i=1;i<STEPS.length;i++){var c='step-pip';if(i<ci)c+=' done';else if(i===ci)c+=' active';h+='<div class="'+c+'"></div>';}
+  h+='</div><div class="step-tabs">';
+  for(var i=1;i<STEPS.length;i++){var c='step-tab';if(i===ci)c+=' active';else if(i<ci)c+=' done';else c+=' locked';var ok=i<=ci;h+='<button class="'+c+'"'+(ok?' onclick="P.go(\''+STEPS[i].id+'\')"':'')+'>'+STEPS[i].name+'</button>';}
+  return h+'</div>';
+}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+function poolById(id){for(var i=0;i<pools.length;i++)if(pools[i].id===id)return pools[i];return null;}
+function initsInPool(pid){return initiatives.filter(function(x){return x.pool===pid&&x.classification!=='run';});}
+function ws(initId){var t=0,tw=criteria.reduce(function(s,c){return s+c.weight;},0);if(!tw)return 0;criteria.forEach(function(c){var v=scores[initId+'_'+c.id]||0;t+=v*(c.weight/tw);});return t*20;}
+function allScored(){for(var i=0;i<initiatives.length;i++){if(initiatives[i].classification==='run')continue;for(var j=0;j<criteria.length;j++){if(!scores[initiatives[i].id+'_'+criteria[j].id])return false;}}return initiatives.filter(function(x){return x.classification!=='run';}).length>0&&criteria.length>0;}
+
+// INTRO
+function introHTML(){
+  var h='<div style="max-width:580px;margin:0 auto;padding:12px 0"><div style="text-align:center;margin-bottom:32px">';
+  h+='<div style="width:52px;height:52px;border-radius:12px;background:#1a1a2e;display:inline-flex;align-items:center;justify-content:center;margin-bottom:14px"><span style="font-size:22px;font-weight:700;color:#fff;font-family:\'JetBrains Mono\',monospace">P</span></div>';
+  h+='<h2 style="font-size:22px;font-weight:700;letter-spacing:-0.03em;line-height:1.2;margin-bottom:8px">Portfolio Prioritisation Tool</h2>';
+  h+='<p style="font-size:13px;color:#6b7280;line-height:1.6;max-width:440px;margin:0 auto">Classify your work. Compare like with like. Lock decisions so they stick. Six steps, one prioritised portfolio.</p></div>';
+
+  h+='<div style="font-size:13px;font-weight:700;margin-bottom:10px">First: classify your work</div>';
+  h+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:20px">';
+  ['run','change','challenge'].forEach(function(k){var m=CLASS_META[k];
+    h+='<div style="background:'+m.bg+';border-radius:10px;padding:12px;border:1.5px solid '+m.color+'22">';
+    h+='<div style="font-size:12px;font-weight:700;color:'+m.color+';margin-bottom:4px">'+m.label+'</div>';
+    h+='<div style="font-size:10px;color:#6b7280;line-height:1.4">'+m.desc+'</div></div>';
+  });
+  h+='</div>';
+
+  var steps=[
+    {n:'1',c:'#0891b2',t:'Define Constraint Pools',d:'What scarce resources do your initiatives compete for? Budget pots, team capacity, leadership attention.'},
+    {n:'2',c:'#059669',t:'Add and Classify Initiatives',d:'Each initiative is classified as Run, Change, or Challenge and assigned to a constraint pool.'},
+    {n:'3',c:'#7c3aed',t:'Set Scoring Criteria',d:'Choose and weight the criteria that matter. You decide what counts and how much.'},
+    {n:'4',c:'#d97706',t:'Score Within Pools',d:'Score Change and Challenge initiatives against criteria. Run work is not scored; it is governed separately.'},
+    {n:'5',c:'#2563eb',t:'View Portfolio by Pool',d:'See ranked initiatives within each pool. Lock decisions. Generate a decision register.'}
+  ];
+  steps.forEach(function(s){
+    h+='<div style="background:#f9fafb;border-radius:8px;padding:12px 14px;margin-bottom:6px;display:flex;align-items:flex-start;gap:10px;border:1px solid #e5e7eb">';
+    h+='<div style="width:26px;height:26px;border-radius:6px;background:'+s.c+';color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-family:\'JetBrains Mono\',monospace">'+s.n+'</div>';
+    h+='<div><div style="font-size:13px;font-weight:600">'+s.t+'</div><div style="font-size:11px;color:#6b7280;margin-top:1px">'+s.d+'</div></div></div>';
+  });
+
+  h+='<div class="info-box" style="margin-top:20px"><div class="title">Why classify?</div>';
+  h+='<p>A \u00A3300k software project, a \u00A320k coaching programme, and a donation matching initiative are different types of work. Scoring them all on the same criteria flattens those differences into meaninglessness. Classification ensures you compare like with like.</p></div>';
+  h+='<div style="text-align:center;margin:24px 0"><button class="btn btn-pri" onclick="P.go(\'pools\')" style="padding:12px 44px;font-size:14px">Start prioritisation</button></div></div>';
+  return h;
+}
+
+// POOLS
+function poolsHTML(){
+  var h=stepsH();
+  h+='<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:16px">';
+  h+='<div><div class="sec-head">Constraint Pools</div>';
+  h+='<div class="sec-sub" style="margin-bottom:0">A constraint pool is a set of initiatives that compete for the same scarce resource. Initiatives in different pools are not compared because approving one does not prevent the other.</div></div>';
+  h+='<button class="btn btn-teal btn-sm" onclick="P.addPool()">+ Add pool</button></div>';
+
+  if(!pools.length){
+    h+='<div class="empty-state"><div class="icon">\uD83C\uDFAF</div><p>No pools defined yet. Common examples: discretionary budget, technology team capacity, senior leadership attention, fundraising capacity.</p></div>';
+    h+='<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:12px">';
+    ['Discretionary budget','Technology team capacity','Senior leadership attention','Fundraising capacity'].forEach(function(n){
+      h+='<button class="btn btn-sec btn-sm" onclick="P.addPoolNamed(\''+esc(n)+'\')">+ '+n+'</button>';
+    });
+    h+='</div>';
+  } else {
+    pools.forEach(function(pl,i){
+      h+='<div class="icard" style="border-left:3px solid '+POOL_COLORS[i%POOL_COLORS.length]+'">';
+      h+='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">';
+      h+='<input class="field-input" style="font-weight:600;border:none;padding:0;font-size:14px" value="'+esc(pl.name)+'" oninput="P.editPool('+pl.id+',this.value)" placeholder="Pool name">';
+      h+='<button class="crit-remove" onclick="P.removePool('+pl.id+')">\u00d7</button></div></div>';
+    });
+    h+='<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:8px">';
+    var used=pools.map(function(p){return p.name.toLowerCase();});
+    ['Discretionary budget','Technology team capacity','Senior leadership attention','Fundraising capacity'].forEach(function(n){
+      if(used.indexOf(n.toLowerCase())===-1) h+='<button class="btn btn-sec btn-sm" onclick="P.addPoolNamed(\''+esc(n)+'\')">+ '+n+'</button>';
+    });
+    h+='</div>';
+  }
+
+  h+='<div class="nav-row"><button class="btn btn-sec" onclick="P.go(\'intro\')">\u2190 Back</button>';
+  h+='<button class="btn btn-pri" onclick="P.go(\'initiatives\')"'+(pools.length>=1?'':' disabled')+'>Next: Add initiatives \u2192</button></div>';
+  if(!pools.length) h+='<div style="font-size:11px;color:#9ca3af;text-align:right;margin-top:4px">Add at least 1 constraint pool to continue</div>';
+  return h;
+}
+
+// INITIATIVES
+function initHTML(){
+  var h=stepsH();
+  h+='<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:16px">';
+  h+='<div><div class="sec-head">Your Initiatives</div>';
+  h+='<div class="sec-sub" style="margin-bottom:0">Classify each as Run, Change, or Challenge and assign to a constraint pool. Run work will not be scored; it is tracked but governed separately.</div></div>';
+  h+='<button class="btn btn-teal btn-sm" onclick="P.addInit()">+ Add initiative</button></div>';
+
+  if(!initiatives.length){
+    h+='<div class="empty-state"><div class="icon">\uD83D\uDCCB</div><p>No initiatives added yet.</p></div>';
+  } else {
+    initiatives.forEach(function(init){
+      var cm=CLASS_META[init.classification];
+      h+='<div class="icard" style="border-left:3px solid '+cm.color+'">';
+      h+='<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:8px">';
+      h+='<input class="field-input" style="font-weight:600;border:none;padding:0;font-size:14px;flex:1" value="'+esc(init.name)+'" oninput="P.editInit('+init.id+',\'name\',this.value)" placeholder="Initiative name">';
+      h+='<button class="crit-remove" onclick="P.removeInit('+init.id+')">\u00d7</button></div>';
+      h+='<textarea class="field-input" style="font-size:12px;min-height:36px;margin-bottom:8px" oninput="P.editInit('+init.id+',\'desc\',this.value)" placeholder="Brief description">'+esc(init.desc)+'</textarea>';
+
+      // Classification cards
+      h+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px">';
+      ['run','change','challenge'].forEach(function(k){
+        var m=CLASS_META[k],sel=init.classification===k;
+        h+='<div class="class-card'+(sel?' selected':'')+'" style="'+(sel?'border-color:'+m.color+';background:'+m.bg:'border-color:#e5e7eb')+'" onclick="P.editInit('+init.id+',\'classification\',\''+k+'\')">';
+        h+='<h4 style="color:'+(sel?m.color:'#9ca3af')+'">'+m.label+'</h4>';
+        h+='<p>'+m.desc.split('.')[0]+'</p></div>';
+      });
+      h+='</div>';
+
+      h+='<div style="display:flex;gap:8px;flex-wrap:wrap">';
+      h+='<div style="flex:1;min-width:140px"><div class="field-label">Constraint pool</div>';
+      h+='<select class="field-input" onchange="P.editInit('+init.id+',\'pool\',parseInt(this.value))">';
+      if(!init.pool) h+='<option value="">Select pool...</option>';
+      pools.forEach(function(pl){h+='<option value="'+pl.id+'"'+(init.pool===pl.id?' selected':'')+'>'+esc(pl.name)+'</option>';});
+      h+='</select></div>';
+      h+='<div style="flex:1;min-width:120px"><div class="field-label">Funding</div>';
+      h+='<select class="field-input" onchange="P.editInit('+init.id+',\'funding\',this.value)">';
+      ['Funded','Partially funded','Unfunded'].forEach(function(f){h+='<option value="'+f+'"'+(init.funding===f?' selected':'')+'>'+f+'</option>';});
+      h+='</select></div>';
+      h+='<div style="flex:1;min-width:100px"><div class="field-label">Duration</div>';
+      h+='<input class="field-input" value="'+esc(init.duration)+'" oninput="P.editInit('+init.id+',\'duration\',this.value)" placeholder="e.g. 3 years"></div>';
+      h+='</div>';
+      if(init.classification==='run') h+='<div style="margin-top:8px;padding:6px 10px;border-radius:6px;background:#eff6ff;font-size:10px;color:#2563eb;font-weight:600">\u2139\uFE0F Run work is tracked but not scored. It is governed at team level.</div>';
+      h+='</div>';
+    });
+  }
+
+  var scorable=initiatives.filter(function(x){return x.classification!=='run'&&x.pool;});
+  h+='<div class="nav-row"><button class="btn btn-sec" onclick="P.go(\'pools\')">\u2190 Back</button>';
+  h+='<button class="btn btn-pri" onclick="P.go(\'criteria\')"'+(scorable.length>=2?'':' disabled')+'>Next: Set criteria \u2192</button></div>';
+  if(scorable.length<2) h+='<div style="font-size:11px;color:#9ca3af;text-align:right;margin-top:4px">Need at least 2 Change or Challenge initiatives with pools assigned</div>';
+  return h;
+}
+
+// CRITERIA
+function critHTML(){
+  var h=stepsH();
+  h+='<div class="sec-head">Scoring Criteria</div>';
+  h+='<div class="sec-sub">Choose and weight the criteria. Higher weight = more influence. Max 6 recommended.</div>';
+  if(criteria.length>0){
+    criteria.forEach(function(c){
+      h+='<div class="crit-item"><span style="color:#d1d5db;font-size:14px">\u2261</span>';
+      h+='<input class="field-input cname" style="border:none;padding:0;flex:1" value="'+esc(c.name)+'" oninput="P.editCrit('+c.id+',\'name\',this.value)" placeholder="Criterion name">';
+      h+='<div style="display:flex;align-items:center;gap:4px"><span style="font-size:10px;color:#9ca3af">Wt:</span>';
+      h+='<input type="number" class="crit-weight" min="1" max="10" value="'+c.weight+'" oninput="P.editCrit('+c.id+',\'weight\',this.value)"></div>';
+      h+='<button class="crit-remove" onclick="P.removeCrit('+c.id+')">\u00d7</button></div>';
+    });
+  }
+  if(criteria.length<6){
+    h+='<div style="margin-top:12px"><div class="field-label">Add a criterion</div><div style="display:flex;flex-wrap:wrap;gap:4px">';
+    var used=criteria.map(function(c){return c.name.toLowerCase();});
+    EXAMPLE_CRITERIA.forEach(function(ec){if(used.indexOf(ec.toLowerCase())===-1)h+='<button class="btn btn-sec btn-sm" onclick="P.addCrit(\''+esc(ec)+'\')">+ '+ec+'</button>';});
+    h+='<button class="btn btn-sec btn-sm" onclick="P.addCritCustom()">+ Custom</button></div></div>';
+  }
+  if(criteria.length>0){
+    var tw=criteria.reduce(function(s,c){return s+c.weight;},0);
+    h+='<div style="margin-top:16px;padding:12px;background:#f9fafb;border-radius:8px;border:1px solid #e5e7eb">';
+    h+='<div style="font-size:11px;font-weight:600;color:#6b7280;margin-bottom:6px">Weight distribution</div>';
+    h+='<div style="display:flex;gap:2px;height:20px;border-radius:4px;overflow:hidden">';
+    var cols=['#0891b2','#059669','#7c3aed','#d97706','#2563eb','#dc2626'];
+    criteria.forEach(function(c,i){var pct=tw>0?(c.weight/tw*100):0;h+='<div style="width:'+pct+'%;background:'+cols[i%cols.length]+';min-width:2px" title="'+esc(c.name)+': '+c.weight+'"></div>';});
+    h+='</div><div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px">';
+    criteria.forEach(function(c,i){var pct=tw>0?Math.round(c.weight/tw*100):0;h+='<span style="font-size:10px;color:#6b7280"><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:'+cols[i%cols.length]+';vertical-align:middle;margin-right:3px"></span>'+esc(c.name)+' ('+pct+'%)</span>';});
+    h+='</div></div>';
+  }
+  h+='<div class="nav-row"><button class="btn btn-sec" onclick="P.go(\'initiatives\')">\u2190 Back</button>';
+  h+='<button class="btn btn-pri" onclick="P.go(\'scoring\')"'+(criteria.length>=2?'':' disabled')+'>Next: Score \u2192</button></div>';
+  if(criteria.length<2) h+='<div style="font-size:11px;color:#9ca3af;text-align:right;margin-top:4px">Add at least 2 criteria</div>';
+  return h;
+}
+
+// SCORING
+function scoreHTML(){
+  var h=stepsH();
+  h+='<div class="sec-head">Score Initiatives</div>';
+  h+='<div class="sec-sub">Score each Change and Challenge initiative 1 (very weak) to 5 (very strong) per criterion. Run work is not scored.</div>';
+
+  pools.forEach(function(pl,pi){
+    var items=initsInPool(pl.id);
+    if(!items.length)return;
+    h+='<div class="pool-section"><div class="pool-head"><div class="pool-dot" style="background:'+POOL_COLORS[pi%POOL_COLORS.length]+'"></div>';
+    h+='<div class="pool-name">'+esc(pl.name)+'</div><div class="pool-count">'+items.length+' initiative'+(items.length>1?'s':'')+'</div></div>';
+    h+='<div style="overflow-x:auto"><div style="display:grid;grid-template-columns:minmax(120px,1fr) repeat('+criteria.length+',56px) 64px;gap:3px;min-width:'+(180+criteria.length*60)+'px">';
+    h+='<div style="font-size:10px;font-weight:600;color:#9ca3af;padding:4px 6px">Initiative</div>';
+    criteria.forEach(function(c){var s=c.name.length>8?c.name.substring(0,7)+'\u2026':c.name;h+='<div style="font-size:9px;font-weight:600;color:#9ca3af;text-align:center;padding:4px 2px" title="'+esc(c.name)+' (wt:'+c.weight+')">'+esc(s)+'</div>';});
+    h+='<div style="font-size:10px;font-weight:600;color:#9ca3af;text-align:center;padding:4px">Score</div>';
+    items.forEach(function(init){
+      var cm=CLASS_META[init.classification];
+      h+='<div style="font-size:12px;font-weight:500;padding:6px;background:#f9fafb;border-radius:4px;display:flex;align-items:center;gap:4px"><span class="tag '+cm.tag+'" style="font-size:8px;padding:1px 4px">'+cm.label[0]+'</span>'+esc(init.name||'Unnamed')+'</div>';
+      criteria.forEach(function(c){var k=init.id+'_'+c.id,v=scores[k]||'';h+='<div style="display:flex;align-items:center;justify-content:center"><input type="number" class="sg-input" min="1" max="5" value="'+v+'" oninput="P.setScore('+init.id+','+c.id+',this.value)" placeholder="\u2014"></div>';});
+      var s=ws(init.id);h+='<div style="font-size:14px;font-weight:700;font-family:\'JetBrains Mono\',monospace;text-align:center;padding:6px;color:'+(s>0?'#059669':'#9ca3af')+';background:#f9fafb;border-radius:4px">'+s.toFixed(1)+'</div>';
+    });
+    h+='</div></div></div>';
+  });
+
+  h+='<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:8px">';
+  for(var s=1;s<=5;s++){var labels={1:'Very weak',2:'Weak',3:'Moderate',4:'Strong',5:'Very strong'};h+='<span style="font-size:10px;color:#9ca3af"><span class="mono" style="font-weight:700">'+s+'</span> = '+labels[s]+'</span>';}
+  h+='</div>';
+
+  h+='<div class="nav-row"><button class="btn btn-sec" onclick="P.go(\'criteria\')">\u2190 Back</button>';
+  h+='<button class="btn btn-pri" onclick="P.go(\'portfolio\')"'+(allScored()?'':' disabled')+'>View portfolio \u2192</button></div>';
+  if(!allScored()) h+='<div style="font-size:11px;color:#9ca3af;text-align:right;margin-top:4px">Score all initiatives to continue</div>';
+  return h;
+}
+
+// PORTFOLIO
+function portHTML(){
+  var h=stepsH();
+  h+='<div class="sec-head">Your Prioritised Portfolio</div>';
+  h+='<div class="sec-sub">Initiatives ranked within each constraint pool. Run work is listed but not ranked. Lock decisions to prevent revisiting without new evidence.</div>';
+
+  // Run work summary
+  var runItems=initiatives.filter(function(x){return x.classification==='run';});
+  if(runItems.length){
+    h+='<div class="pool-section" style="border-color:#2563eb33;background:#fafbff"><div class="pool-head"><div class="pool-dot" style="background:#2563eb"></div><div class="pool-name">Run: Core Work</div><div class="pool-count">'+runItems.length+' item'+(runItems.length>1?'s':'')+' (tracked, not ranked)</div></div>';
+    runItems.forEach(function(init){
+      h+='<div style="padding:8px 12px;background:#fff;border-radius:6px;margin-bottom:4px;display:flex;align-items:center;gap:8px;border:1px solid #e5e7eb">';
+      h+='<span class="tag tag-run">Run</span><span style="font-size:12px;font-weight:500">'+esc(init.name||'Unnamed')+'</span>';
+      if(init.funding) h+='<span class="tag '+(init.funding==='Funded'?'tag-green':init.funding==='Partially funded'?'tag-amber':'tag-red')+'" style="margin-left:auto">'+init.funding+'</span>';
+      h+='</div>';
+    });
+    h+='</div>';
+  }
+
+  // Scored pools
+  pools.forEach(function(pl,pi){
+    var items=initsInPool(pl.id);
+    if(!items.length)return;
+    var sorted=items.slice().sort(function(a,b){return ws(b.id)-ws(a.id);});
+    var maxS=sorted.length>0?ws(sorted[0].id):1;
+    h+='<div class="pool-section"><div class="pool-head"><div class="pool-dot" style="background:'+POOL_COLORS[pi%POOL_COLORS.length]+'"></div><div class="pool-name">'+esc(pl.name)+'</div><div class="pool-count">'+sorted.length+' initiative'+(sorted.length>1?'s':'')+'</div></div>';
+    sorted.forEach(function(init,i){
+      var s=ws(init.id),pct=maxS>0?(s/maxS*100):0,cm=CLASS_META[init.classification];
+      var dec=decisions[init.id]||{status:'pending',locked:false};
+      h+='<div class="port-item"'+(dec.status==='rejected'?' style="opacity:0.45"':'')+'>';
+      h+='<div class="port-rank" style="'+(dec.status==='rejected'?'background:#dc2626':'')+'">'+( dec.status==='rejected'?'\u2717':(i+1))+'</div>';
+      h+='<div class="port-info"><div class="port-name">'+esc(init.name||'Unnamed')+'</div>';
+      h+='<div class="port-meta"><span class="tag '+cm.tag+'">'+cm.label+'</span>';
+      var ft=init.funding==='Funded'?'tag-green':init.funding==='Partially funded'?'tag-amber':'tag-red';
+      h+='<span class="tag '+ft+'">'+init.funding+'</span>';
+      if(init.duration) h+='<span style="font-size:10px;color:#9ca3af">'+esc(init.duration)+'</span>';
+      h+='</div><div class="port-bar"><div class="port-bar-fill" style="width:'+pct+'%"></div></div></div>';
+      h+='<div style="text-align:center;flex-shrink:0"><div class="port-score">'+s.toFixed(1)+'</div>';
+      if(dec.locked){h+='<div class="lock-badge lock-locked">\uD83D\uDD12 Locked</div>';}
+      else{h+='<div style="display:flex;gap:3px;margin-top:4px">';
+        if(dec.status!=='approved')h+='<button class="btn btn-green btn-sm" style="padding:3px 8px;font-size:9px" onclick="P.decide('+init.id+',\'approved\')">\u2713</button>';
+        if(dec.status!=='rejected')h+='<button class="btn btn-danger btn-sm" style="padding:3px 8px;font-size:9px" onclick="P.decide('+init.id+',\'rejected\')">\u2717</button>';
+        if(dec.status!=='pending')h+='<button class="btn btn-sec btn-sm" style="padding:3px 8px;font-size:9px" onclick="P.lock('+init.id+')">\uD83D\uDD12</button>';
+      h+='</div>';}
+      h+='</div></div>';
+    });
+    h+='</div>';
+  });
+
+  h+='<div class="cta-box"><div style="font-size:10px;text-transform:uppercase;letter-spacing:0.1em;font-weight:700;color:#9ca3af;margin-bottom:4px">What happens next</div>';
+  h+='<div style="font-size:13px;font-weight:600;margin-bottom:6px">Turn this into a facilitated prioritisation</div>';
+  h+='<p style="font-size:11px;color:#6b7280;line-height:1.5">This prototype demonstrates the tool\u2019s logic. A facilitated session classifies work with your team, defines constraint pools from real resource data, and produces a decision register your board can govern against.</p>';
+  h+='<a href="mailto:hello@unconsult.co?subject=Portfolio%20Prioritisation" class="cta-link">Book a session</a></div>';
+  h+='<div class="nav-row"><button class="btn btn-sec" onclick="P.go(\'scoring\')">\u2190 Back</button><button class="btn btn-sec" onclick="P.go(\'intro\')">Start over</button></div>';
+  return h;
+}
+
+// API
+window.P={
+  go:function(s){screen=s;draw();},
+  addPool:function(){pools.push({id:poolC++,name:''});draw();setTimeout(function(){var c=document.querySelectorAll('.icard');if(c.length)c[c.length-1].querySelector('input').focus();},50);},
+  addPoolNamed:function(n){pools.push({id:poolC++,name:n});draw();},
+  editPool:function(id,v){pools.forEach(function(p){if(p.id===id)p.name=v;});},
+  removePool:function(id){pools=pools.filter(function(p){return p.id!==id;});initiatives.forEach(function(i){if(i.pool===id)i.pool=null;});draw();},
+  addInit:function(){initiatives.push({id:idC++,name:'',desc:'',classification:'change',pool:pools.length?pools[0].id:null,funding:'Unfunded',duration:''});draw();setTimeout(function(){var c=document.querySelectorAll('.icard');if(c.length){var l=c[c.length-1];l.querySelector('input').focus();l.scrollIntoView({behavior:'smooth',block:'center'});}},50);},
+  removeInit:function(id){initiatives=initiatives.filter(function(i){return i.id!==id;});Object.keys(scores).forEach(function(k){if(k.startsWith(id+'_'))delete scores[k];});delete decisions[id];draw();},
+  editInit:function(id,f,v){initiatives.forEach(function(i){if(i.id===id)i[f]=v;});if(f==='classification'||f==='pool')draw();},
+  addCrit:function(n){if(criteria.length>=6)return;criteria.push({id:critC++,name:n,weight:5});draw();},
+  addCritCustom:function(){if(criteria.length>=6)return;criteria.push({id:critC++,name:'',weight:5});draw();setTimeout(function(){var c=document.querySelectorAll('.crit-item');if(c.length)c[c.length-1].querySelector('.cname').focus();},50);},
+  editCrit:function(id,f,v){criteria.forEach(function(c){if(c.id===id){if(f==='weight')c.weight=Math.max(1,Math.min(10,parseInt(v)||1));else c[f]=v;}});if(f==='weight')draw();},
+  removeCrit:function(id){criteria=criteria.filter(function(c){return c.id!==id;});Object.keys(scores).forEach(function(k){if(k.endsWith('_'+id))delete scores[k];});draw();},
+  setScore:function(iid,cid,v){var n=parseInt(v);if(n>=1&&n<=5)scores[iid+'_'+cid]=n;else delete scores[iid+'_'+cid];},
+  decide:function(id,s){decisions[id]=decisions[id]||{};decisions[id].status=s;decisions[id].locked=false;draw();},
+  lock:function(id){if(decisions[id]){decisions[id].locked=true;draw();}},
+  unlock:function(id){if(decisions[id]&&confirm('Reopening requires new evidence. Are you sure?')){decisions[id].locked=false;draw();}}
+};
+})();
+</script>
+</body>
+</html>
