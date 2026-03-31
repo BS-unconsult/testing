@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bontle Senne Consulting — Go / No-Go Decision Framework</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0f172a; }
+  @media print {
+    body { background: #fff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    [data-no-print] { display: none !important; }
+  }
+  #root { min-height: 100vh; }
+</style>
+<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useMemo, useCallback, useRef } = React;
+
+function downloadJSON(data, filename) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a"); a.href = url; a.download = filename; a.click(); URL.revokeObjectURL(url);
+}
+
+function ExportToolbar({ onSave, onLoad }) {
+  const fileRef = useRef(null);
+  return (
+    <div data-no-print style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+      <button onClick={() => window.print()} style={{ padding: "6px 14px", borderRadius: 20, border: "1px solid #334155", background: "transparent", color: "#94a3b8", fontSize: 12, cursor: "pointer" }}>Print / Save as PDF</button>
+      <button onClick={onSave} style={{ padding: "6px 14px", borderRadius: 20, border: "1px solid #334155", background: "transparent", color: "#94a3b8", fontSize: 12, cursor: "pointer" }}>Save session</button>
+      <button onClick={() => fileRef.current?.click()} style={{ padding: "6px 14px", borderRadius: 20, border: "1px solid #334155", background: "transparent", color: "#94a3b8", fontSize: 12, cursor: "pointer" }}>Load session</button>
+      <input ref={fileRef} type="file" accept=".json" style={{ display: "none" }} onChange={e => {
+        const file = e.target.files?.[0]; if (!file) return;
+        const reader = new FileReader();
+        reader.onload = ev => { try { onLoad(JSON.parse(ev.target.result)); } catch(err) { alert("Could not read session file."); } };
+        reader.readAsText(file); e.target.value = "";
+      }} />
+    </div>
+  );
+}
+
+const DEFAULT_CRITERIA = [
+  { id: "strategic_fit", name: "Strategic Fit", weight: 25, description: "Alignment with organisational strategy and brand positioning" },
+  { id: "financial_viability", name: "Financial Viability", weight: 20, description: "Revenue potential, margin profile, and payback period" },
+  { id: "customer_demand", name: "Customer Demand", weight: 20, description: "Evidence of segment appetite and willingness to pay" },
+  { id: "competitive_urgency", name: "Competitive Urgency", weight: 15, description: "Risk of competitor pre-emption or market timing pressure" },
+  { id: "technical_feasibility", name: "Technical Feasibility", weight: 10, description: "Platform readiness, integration complexity, and delivery risk" },
+  { id: "time_to_market", name: "Time to Market", weight: 10, description: "Speed to MVP launch and iteration capability" },
+];
+
+const DEFAULT_OPTIONS = [
+  { id: "opt_a", name: "Option A", color: "#22d3ee" },
+  { id: "opt_b", name: "Option B", color: "#a78bfa" },
+  { id: "opt_c", name: "Option C", color: "#fb923c" },
+];
+
+const SCORE_LABELS = { 1: "Very weak", 2: "Weak", 3: "Moderate", 4: "Strong", 5: "Very strong" };
+
+const RISK_FLAGS = [
+  { id: "regulatory", label: "Regulatory or compliance risk" },
+  { id: "dependency", label: "Critical third-party dependency" },
+  { id: "cannibalisation", label: "Significant cannibalisation of existing revenue" },
+  { id: "capability_gap", label: "Capability or skills gap in delivery team" },
+  { id: "brand_risk", label: "Reputational or brand risk" },
+  { id: "data_privacy", label: "Data privacy or GDPR exposure" },
+];
+
+function generateId() { return "id_" + Math.random().toString(36).substr(2, 9); }
+
+function App() {
+  const [criteria, setCriteria] = useState(DEFAULT_CRITERIA);
+  const [options, setOptions] = useState(DEFAULT_OPTIONS);
+  const [scores, setScores] = useState({});
+  const [risks, setRisks] = useState({});
+  const [notes, setNotes] = useState({});
+  const [activeTab, setActiveTab] = useState("scoring");
+  const [editingCriteria, setEditingCriteria] = useState(false);
+  const [showInstructions, setShowInstructions] = useState(false);
+
+  const totalWeight = criteria.reduce((s, c) => s + c.weight, 0);
+  const getScore = useCallback((optId, critId) => scores[optId + "_" + critId] || 0, [scores]);
+  const setScore = useCallback((optId, critId, val) => { setScores(prev => ({ ...prev, [optId + "_" + critId]: val })); }, []);
+  const getRisk = useCallback((optId, riskId) => risks[optId + "_" + riskId] || false, [risks]);
+  const toggleRisk = useCallback((optId, riskId) => { setRisks(prev => ({ ...prev, [optId + "_" + riskId]: !prev[optId + "_" + riskId] })); }, []);
+  const getNote = useCallback((optId) => notes[optId] || "", [notes]);
+  const setNote = useCallback((optId, val) => { setNotes(prev => ({ ...prev, [optId]: val })); }, []);
+
+  const results = useMemo(() => {
+    return options.map(opt => {
+      const criteriaScores = criteria.map(c => {
+        const raw = getScore(opt.id, c.id);
+        const normWeight = totalWeight > 0 ? c.weight / totalWeight : 0;
+        return { criteriaId: c.id, raw, weighted: raw * normWeight };
+      });
+      const totalScore = criteriaScores.reduce((s, cs) => s + cs.weighted, 0);
+      const riskCount = RISK_FLAGS.filter(r => getRisk(opt.id, r.id)).length;
+      const hasScores = criteriaScores.some(cs => cs.raw > 0);
+      return { ...opt, criteriaScores, totalScore, riskCount, hasScores, riskAdjustedScore: totalScore * (1 - riskCount * 0.08) };
+    });
+  }, [options, criteria, getScore, getRisk, totalWeight]);
+
+  const sensitivity = useMemo(() => {
+    return criteria.map(targetCrit => {
+      const modifiedCriteria = criteria.map(c => c.id === targetCrit.id ? { ...c, weight: c.weight * 2 } : c);
+      const modTotal = modifiedCriteria.reduce((s, c) => s + c.weight, 0);
+      const modResults = options.map(opt => {
+        const total = modifiedCriteria.reduce((s, c) => { return s + getScore(opt.id, c.id) * (modTotal > 0 ? c.weight / modTotal : 0); }, 0);
+        return { optId: opt.id, total };
+      });
+      const baseWinner = results.reduce((best, r) => r.totalScore > best.totalScore ? r : best, results[0]);
+      const modWinner = modResults.reduce((best, r) => r.total > best.total ? r : best, modResults[0]);
+      return { criteriaId: targetCrit.id, criteriaName: targetCrit.name, leaderChanges: baseWinner.id !== modWinner.optId, modResults };
+    });
+  }, [criteria, options, getScore, results]);
+
+  const sortedResults = [...results].sort((a, b) => b.totalScore - a.totalScore);
+  const leader = sortedResults[0];
+  const hasAnyScores = results.some(r => r.hasScores);
+
+  const updateOptionName = (id, name) => { setOptions(prev => prev.map(o => o.id === id ? { ...o, name } : o)); };
+  const addOption = () => { const colors = ["#34d399", "#f43f5e", "#facc15", "#60a5fa"]; setOptions(prev => [...prev, { id: generateId(), name: "Option " + String.fromCharCode(65 + prev.length), color: colors[prev.length % colors.length] }]); };
+  const removeOption = (id) => { if (options.length <= 2) return; setOptions(prev => prev.filter(o => o.id !== id)); };
+  const updateCriterion = (id, field, val) => { setCriteria(prev => prev.map(c => c.id === id ? { ...c, [field]: val } : c)); };
+  const addCriterion = () => { setCriteria(prev => [...prev, { id: generateId(), name: "New Criterion", weight: 10, description: "Describe what this criterion measures" }]); };
+  const removeCriterion = (id) => { if (criteria.length <= 2) return; setCriteria(prev => prev.filter(c => c.id !== id)); };
+
+  const tabs = [{ id: "scoring", label: "Score Options" }, { id: "risks", label: "Risk Flags" }, { id: "results", label: "Results" }, { id: "sensitivity", label: "Sensitivity" }];
+
+  const handleSave = useCallback(() => { downloadJSON({ criteria, options, scores, risks, notes, activeTab, savedAt: new Date().toISOString() }, "BS_GoNoGo_Session.json"); }, [criteria, options, scores, risks, notes, activeTab]);
+  const handleLoad = useCallback((data) => {
+    if (data.criteria) setCriteria(data.criteria); if (data.options) setOptions(data.options);
+    if (data.scores) setScores(data.scores); if (data.risks) setRisks(data.risks);
+    if (data.notes) setNotes(data.notes); if (data.activeTab) setActiveTab(data.activeTab);
+  }, []);
+
+  const ScoreButton = ({ value, current, onClick }) => (
+    <button onClick={() => onClick(value)} title={SCORE_LABELS[value]} style={{ width: 36, height: 36, borderRadius: 8, border: "none", background: current === value ? "#22d3ee" : current > 0 && current >= value ? "rgba(34,211,238,0.15)" : "#1e293b", color: current === value ? "#0f172a" : current > 0 && current >= value ? "#22d3ee" : "#64748b", fontWeight: 700, fontSize: 14, cursor: "pointer", transition: "all 0.15s ease" }}>{value}</button>
+  );
+
+  return (
+    <div style={{ fontFamily: "'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif", background: "#0f172a", color: "#e2e8f0", minHeight: "100vh", padding: "24px 20px" }}>
+      <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ fontSize: 10, color: "#a78bfa", textTransform: "uppercase", letterSpacing: "0.15em", fontWeight: 600, marginBottom: 4 }}>Bontle Senne Consulting</div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+          <div>
+            <h1 style={{ fontSize: 24, fontWeight: 700, color: "#f1f5f9", margin: 0, lineHeight: 1.2 }}>Go / No-Go Decision Framework</h1>
+            <p style={{ fontSize: 13, color: "#64748b", marginTop: 6, marginBottom: 0 }}>Score strategic options against weighted criteria. Stress-test the outcome by adjusting weights.</p>
+            <div style={{ marginTop: 12 }}><ExportToolbar onSave={handleSave} onLoad={handleLoad} /></div>
+          </div>
+          <button onClick={() => setShowInstructions(!showInstructions)} style={{ padding: "6px 14px", borderRadius: 20, border: "1px solid #334155", background: "transparent", color: "#94a3b8", fontSize: 12, cursor: "pointer" }}>{showInstructions ? "Hide" : "How to use"}</button>
+        </div>
+      </div>
+
+      {showInstructions && (
+        <div style={{ background: "#1e293b", borderRadius: 10, padding: 20, marginBottom: 24, borderLeft: "3px solid #a78bfa", fontSize: 13, color: "#94a3b8", lineHeight: 1.7 }}>
+          <strong style={{ color: "#f1f5f9" }}>Sprint facilitation guide</strong>
+          <ol style={{ paddingLeft: 20, marginTop: 8 }}>
+            <li><strong style={{ color: "#e2e8f0" }}>Name your options</strong> — click the option names to edit. Add or remove options as needed.</li>
+            <li><strong style={{ color: "#e2e8f0" }}>Agree criteria and weights</strong> — use the "Edit criteria" toggle to customise. Weights represent relative importance (they auto-normalise to 100%).</li>
+            <li><strong style={{ color: "#e2e8f0" }}>Score each option</strong> — 1 (very weak) to 5 (very strong) against each criterion. Score as a leadership team, debating where you disagree.</li>
+            <li><strong style={{ color: "#e2e8f0" }}>Flag risks</strong> — binary flags for material risks. Each flag reduces the risk-adjusted score by 8%.</li>
+            <li><strong style={{ color: "#e2e8f0" }}>Review results</strong> — compare weighted scores, then run sensitivity analysis to see if changing priorities would change the winner.</li>
+            <li><strong style={{ color: "#e2e8f0" }}>Stress-test</strong> — go back and adjust weights. If the leader changes, the decision depends on a judgement call about priorities, not just the numbers.</li>
+          </ol>
+        </div>
+      )}
+
+      <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
+        {options.map(opt => (
+          <div key={opt.id} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <div style={{ width: 10, height: 10, borderRadius: "50%", background: opt.color }} />
+            <input value={opt.name} onChange={e => updateOptionName(opt.id, e.target.value)} style={{ background: "transparent", border: "none", borderBottom: "1px dashed #334155", color: "#f1f5f9", fontSize: 14, fontWeight: 600, width: 120, padding: "2px 0" }} />
+            {options.length > 2 && <button onClick={() => removeOption(opt.id)} style={{ background: "none", border: "none", color: "#475569", cursor: "pointer", fontSize: 14 }}>{"\u00D7"}</button>}
+          </div>
+        ))}
+        {options.length < 6 && <button onClick={addOption} style={{ padding: "4px 12px", borderRadius: 16, border: "1px dashed #334155", background: "transparent", color: "#64748b", fontSize: 12, cursor: "pointer" }}>+ Add option</button>}
+      </div>
+
+      <div style={{ marginBottom: 16 }}>
+        <button onClick={() => setEditingCriteria(!editingCriteria)} style={{ padding: "6px 14px", borderRadius: 20, fontSize: 12, cursor: "pointer", border: editingCriteria ? "1px solid #a78bfa" : "1px solid #334155", background: editingCriteria ? "rgba(167,139,250,0.1)" : "transparent", color: editingCriteria ? "#a78bfa" : "#94a3b8" }}>{editingCriteria ? "Done editing criteria" : "Edit criteria and weights"}</button>
+      </div>
+
+      {editingCriteria && (
+        <div style={{ background: "#1e293b", borderRadius: 10, padding: 16, marginBottom: 24 }}>
+          {criteria.map(c => (
+            <div key={c.id} style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 10, flexWrap: "wrap" }}>
+              <input value={c.name} onChange={e => updateCriterion(c.id, "name", e.target.value)} style={{ flex: 1, minWidth: 160, background: "#0f172a", border: "1px solid #334155", borderRadius: 6, padding: "6px 10px", color: "#e2e8f0", fontSize: 13 }} />
+              <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                <span style={{ fontSize: 11, color: "#64748b" }}>Weight:</span>
+                <input type="number" value={c.weight} onChange={e => updateCriterion(c.id, "weight", Math.max(1, parseInt(e.target.value) || 1))} style={{ width: 50, background: "#0f172a", border: "1px solid #334155", borderRadius: 6, padding: "6px 8px", color: "#e2e8f0", fontSize: 13, fontFamily: "'JetBrains Mono', monospace", textAlign: "right" }} />
+                <span style={{ fontSize: 11, color: "#475569" }}>({totalWeight > 0 ? ((c.weight / totalWeight) * 100).toFixed(0) : 0}%)</span>
+              </div>
+              {criteria.length > 2 && <button onClick={() => removeCriterion(c.id)} style={{ background: "none", border: "none", color: "#475569", cursor: "pointer", fontSize: 16 }}>{"\u00D7"}</button>}
+            </div>
+          ))}
+          <button onClick={addCriterion} style={{ padding: "6px 14px", borderRadius: 16, border: "1px dashed #334155", background: "transparent", color: "#64748b", fontSize: 12, cursor: "pointer", marginTop: 8 }}>+ Add criterion</button>
+        </div>
+      )}
+
+      <div style={{ display: "flex", gap: 0, marginBottom: 20, borderBottom: "1px solid #1e293b" }}>
+        {tabs.map(tab => (
+          <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{ padding: "10px 18px", background: "transparent", border: "none", borderBottom: activeTab === tab.id ? "2px solid #a78bfa" : "2px solid transparent", color: activeTab === tab.id ? "#f1f5f9" : "#64748b", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>{tab.label}</button>
+        ))}
+      </div>
+
+      {activeTab === "scoring" && (
+        <div>
+          {options.map(opt => (
+            <div key={opt.id} style={{ marginBottom: 28 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+                <div style={{ width: 12, height: 12, borderRadius: "50%", background: opt.color }} />
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: "#f1f5f9", margin: 0 }}>{opt.name}</h3>
+              </div>
+              {criteria.map(c => (
+                <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 10, paddingLeft: 20 }}>
+                  <div style={{ flex: 1, minWidth: 140 }}>
+                    <div style={{ fontSize: 13, color: "#e2e8f0", fontWeight: 500 }}>{c.name}</div>
+                    <div style={{ fontSize: 11, color: "#475569" }}>{c.description}</div>
+                  </div>
+                  <div style={{ display: "flex", gap: 4 }}>
+                    {[1, 2, 3, 4, 5].map(v => <ScoreButton key={v} value={v} current={getScore(opt.id, c.id)} onClick={val => setScore(opt.id, c.id, val)} />)}
+                  </div>
+                  <div style={{ fontSize: 11, color: "#64748b", width: 70, textAlign: "right" }}>{getScore(opt.id, c.id) > 0 ? SCORE_LABELS[getScore(opt.id, c.id)] : "\u2014"}</div>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {activeTab === "risks" && (
+        <div>
+          {options.map(opt => (
+            <div key={opt.id} style={{ marginBottom: 28 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+                <div style={{ width: 12, height: 12, borderRadius: "50%", background: opt.color }} />
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: "#f1f5f9", margin: 0 }}>{opt.name}</h3>
+              </div>
+              {RISK_FLAGS.map(r => (
+                <div key={r.id} onClick={() => toggleRisk(opt.id, r.id)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 20px", cursor: "pointer", marginBottom: 4, borderRadius: 8, background: getRisk(opt.id, r.id) ? "rgba(244,63,94,0.08)" : "transparent" }}>
+                  <div style={{ width: 20, height: 20, borderRadius: 4, border: getRisk(opt.id, r.id) ? "none" : "1px solid #334155", background: getRisk(opt.id, r.id) ? "#f43f5e" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: "#fff", fontWeight: 700 }}>{getRisk(opt.id, r.id) ? "\u2713" : ""}</div>
+                  <span style={{ fontSize: 13, color: getRisk(opt.id, r.id) ? "#fca5a5" : "#94a3b8" }}>{r.label}</span>
+                </div>
+              ))}
+              <div style={{ paddingLeft: 20, marginTop: 12 }}>
+                <div style={{ fontSize: 11, color: "#64748b", marginBottom: 4 }}>Additional notes or conditions</div>
+                <textarea value={getNote(opt.id)} onChange={e => setNote(opt.id, e.target.value)} placeholder="Record key assumptions, conditions, or blockers discussed by the team..." style={{ width: "100%", minHeight: 60, background: "#1e293b", border: "1px solid #334155", borderRadius: 8, padding: 10, color: "#e2e8f0", fontSize: 13, fontFamily: "inherit", resize: "vertical" }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {activeTab === "results" && (
+        <div>
+          {!hasAnyScores && <div style={{ textAlign: "center", padding: 40, color: "#475569" }}>No scores entered yet. Go to the "Score Options" tab to begin.</div>}
+          {hasAnyScores && (
+            <>
+              <div style={{ marginBottom: 32 }}>
+                <h3 style={{ fontSize: 14, color: "#94a3b8", fontWeight: 600, marginBottom: 16 }}>Weighted Scores</h3>
+                {sortedResults.map(r => (
+                  <div key={r.id} style={{ marginBottom: 12 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: "#f1f5f9" }}>{r.name}</span>
+                      <span style={{ fontSize: 14, fontWeight: 700, fontFamily: "'JetBrains Mono', monospace", color: r.color }}>{r.totalScore.toFixed(2)} / 5.00</span>
+                    </div>
+                    <div style={{ background: "#1e293b", borderRadius: 6, height: 28, position: "relative", overflow: "hidden" }}>
+                      <div style={{ width: (r.totalScore / 5) * 100 + "%", height: "100%", background: r.color, borderRadius: 6, opacity: 0.8, transition: "width 0.4s ease" }} />
+                      {r.riskCount > 0 && <div style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", fontSize: 10, color: "#fca5a5", fontWeight: 600 }}>{r.riskCount} risk{r.riskCount > 1 ? "s" : ""} flagged {"\u2192"} adjusted: {r.riskAdjustedScore.toFixed(2)}</div>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ background: "#1e293b", borderRadius: 10, padding: 20, marginBottom: 24 }}>
+                <h3 style={{ fontSize: 14, color: "#f1f5f9", fontWeight: 600, marginBottom: 16 }}>Criterion-Level Breakdown</h3>
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                    <thead>
+                      <tr style={{ borderBottom: "2px solid #334155" }}>
+                        <th style={{ padding: "8px 6px", textAlign: "left", color: "#94a3b8", fontWeight: 600, fontSize: 11 }}>CRITERION</th>
+                        <th style={{ padding: "8px 6px", textAlign: "right", color: "#94a3b8", fontWeight: 600, fontSize: 11 }}>WEIGHT</th>
+                        {options.map(o => <th key={o.id} style={{ padding: "8px 6px", textAlign: "right", color: o.color, fontWeight: 600, fontSize: 11 }}>{o.name.toUpperCase()}</th>)}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {criteria.map(c => (
+                        <tr key={c.id} style={{ borderBottom: "1px solid #0f172a" }}>
+                          <td style={{ padding: "8px 6px", color: "#e2e8f0" }}>{c.name}</td>
+                          <td style={{ padding: "8px 6px", textAlign: "right", color: "#64748b", fontFamily: "'JetBrains Mono', monospace" }}>{totalWeight > 0 ? ((c.weight / totalWeight) * 100).toFixed(0) : 0}%</td>
+                          {results.map(r => { const cs = r.criteriaScores.find(s => s.criteriaId === c.id); return (
+                            <td key={r.id} style={{ padding: "8px 6px", textAlign: "right", fontFamily: "'JetBrains Mono', monospace" }}>
+                              <span style={{ color: "#94a3b8" }}>{cs?.raw || "\u2014"}</span>
+                              <span style={{ color: "#475569", fontSize: 10 }}> ({cs?.weighted.toFixed(2)})</span>
+                            </td>
+                          ); })}
+                        </tr>
+                      ))}
+                      <tr style={{ borderTop: "2px solid #334155" }}>
+                        <td style={{ padding: "10px 6px", fontWeight: 700, color: "#f1f5f9" }}>TOTAL</td>
+                        <td style={{ padding: "10px 6px", textAlign: "right", color: "#64748b" }}>100%</td>
+                        {results.map(r => <td key={r.id} style={{ padding: "10px 6px", textAlign: "right", fontWeight: 700, fontSize: 14, color: r.color, fontFamily: "'JetBrains Mono', monospace" }}>{r.totalScore.toFixed(2)}</td>)}
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div style={{ background: leader?.totalScore > 0 ? "rgba(34,211,238,0.06)" : "#1e293b", borderRadius: 10, padding: 20, borderLeft: "3px solid " + (leader?.color || "#334155") }}>
+                <h3 style={{ fontSize: 14, color: "#f1f5f9", fontWeight: 600, marginBottom: 8 }}>Framework Output</h3>
+                {leader?.totalScore > 0 ? (
+                  <div style={{ fontSize: 13, color: "#94a3b8", lineHeight: 1.7 }}>
+                    <strong style={{ color: leader.color, fontSize: 16 }}>{leader.name}</strong> leads with a weighted score of <strong style={{ color: "#f1f5f9" }}>{leader.totalScore.toFixed(2)}</strong>
+                    {leader.riskCount > 0 && <span> (risk-adjusted: <span style={{ color: "#fca5a5" }}>{leader.riskAdjustedScore.toFixed(2)}</span>)</span>}.
+                    {sortedResults.length > 1 && sortedResults[1].totalScore > 0 && (
+                      <span> {sortedResults[1].name} follows at {sortedResults[1].totalScore.toFixed(2)}, a gap of <strong style={{ color: "#f1f5f9" }}>{(leader.totalScore - sortedResults[1].totalScore).toFixed(2)}</strong>.
+                        {leader.totalScore - sortedResults[1].totalScore < 0.5 && <span style={{ color: "#fb923c" }}> This is a narrow margin — check the Sensitivity tab to see whether changing priorities would change the outcome.</span>}
+                      </span>
+                    )}
+                  </div>
+                ) : <div style={{ color: "#475569" }}>Score at least one option to see results.</div>}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {activeTab === "sensitivity" && (
+        <div>
+          <p style={{ fontSize: 13, color: "#64748b", marginBottom: 20, lineHeight: 1.6 }}>For each criterion below, the model doubles its weight (and renormalises) to test whether the leading option changes. A highlighted row means the winner flips — indicating the decision depends on how much you value that criterion.</p>
+          {!hasAnyScores && <div style={{ textAlign: "center", padding: 40, color: "#475569" }}>Score options first to run sensitivity analysis.</div>}
+          {hasAnyScores && sensitivity.map(s => (
+            <div key={s.criteriaId} style={{ background: s.leaderChanges ? "rgba(251,146,60,0.08)" : "#1e293b", borderRadius: 10, padding: 16, marginBottom: 10, borderLeft: s.leaderChanges ? "3px solid #fb923c" : "3px solid transparent" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: s.leaderChanges ? "#fb923c" : "#e2e8f0" }}>{s.criteriaName}</span>
+                  {s.leaderChanges && <span style={{ fontSize: 11, color: "#fb923c", marginLeft: 8, fontWeight: 500 }}>{"\u26A0"} Leader changes</span>}
+                </div>
+                <div style={{ display: "flex", gap: 16 }}>
+                  {s.modResults.map(mr => { const opt = options.find(o => o.id === mr.optId); return <span key={mr.optId} style={{ fontSize: 12, fontFamily: "'JetBrains Mono', monospace", color: opt?.color || "#94a3b8" }}>{mr.total.toFixed(2)}</span>; })}
+                </div>
+              </div>
+            </div>
+          ))}
+          {hasAnyScores && (
+            <div style={{ marginTop: 20, fontSize: 12, color: "#475569", lineHeight: 1.6 }}>
+              <strong style={{ color: "#94a3b8" }}>How to use this in the room:</strong> If no rows show "Leader changes," the decision is robust — it holds regardless of how you weight the criteria. If one or more rows flip the leader, discuss those criteria explicitly. The team needs to make a conscious call about how much they value that factor, because the decision depends on it.
+            </div>
+          )}
+        </div>
+      )}
+
+      <div style={{ marginTop: 32, padding: "16px 0", borderTop: "1px solid #1e293b", fontSize: 11, color: "#475569", lineHeight: 1.6 }}>
+        <strong style={{ color: "#94a3b8" }}>Framework notes:</strong> Weighted scoring normalised to 100%. Risk adjustment applies an 8% penalty per flagged risk to the total weighted score. Sensitivity tests each criterion at 2x weight with renormalisation. This framework captures structured judgement — it does not replace it. The value is in the debate, not just the numbers.
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>

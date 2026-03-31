@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bontle Senne Consulting — Transformation Roadmap Builder</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0f172a; }
+  @media print {
+    body { background: #fff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    [data-no-print] { display: none !important; }
+  }
+  #root { min-height: 100vh; }
+</style>
+<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useMemo, useCallback, useRef } = React;
+
+function downloadJSON(data, filename) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a"); a.href = url; a.download = filename; a.click(); URL.revokeObjectURL(url);
+}
+
+function ExportToolbar({ onSave, onLoad }) {
+  const fileRef = useRef(null);
+  return (
+    <div data-no-print style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+      <button onClick={() => window.print()} style={{ padding: "6px 14px", borderRadius: 20, border: "1px solid #334155", background: "transparent", color: "#94a3b8", fontSize: 12, cursor: "pointer" }}>Print / Save as PDF</button>
+      <button onClick={onSave} style={{ padding: "6px 14px", borderRadius: 20, border: "1px solid #334155", background: "transparent", color: "#94a3b8", fontSize: 12, cursor: "pointer" }}>Save session</button>
+      <button onClick={() => fileRef.current?.click()} style={{ padding: "6px 14px", borderRadius: 20, border: "1px solid #334155", background: "transparent", color: "#94a3b8", fontSize: 12, cursor: "pointer" }}>Load session</button>
+      <input ref={fileRef} type="file" accept=".json" style={{ display: "none" }} onChange={e => {
+        const file = e.target.files?.[0]; if (!file) return;
+        const reader = new FileReader();
+        reader.onload = ev => { try { onLoad(JSON.parse(ev.target.result)); } catch(err) { alert("Could not read session file."); } };
+        reader.readAsText(file); e.target.value = "";
+      }} />
+    </div>
+  );
+}
+
+const WORKSTREAM_COLORS = ["#34d399", "#22d3ee", "#a78bfa", "#fb923c", "#f43f5e", "#facc15", "#60a5fa", "#f472b6"];
+
+const DEFAULT_WORKSTREAMS = [
+  {
+    id: "ws1", name: "Service Design", color: WORKSTREAM_COLORS[0],
+    milestones: [
+      { id: "m1", name: "Needs assessment complete", month: 2, status: "not_started", risk: "low" },
+      { id: "m2", name: "Service model approved by board", month: 4, status: "not_started", risk: "medium" },
+      { id: "m3", name: "Pilot design signed off", month: 6, status: "not_started", risk: "low" },
+    ],
+  },
+  {
+    id: "ws2", name: "People and Capability", color: WORKSTREAM_COLORS[1],
+    milestones: [
+      { id: "m4", name: "Role profiles defined", month: 3, status: "not_started", risk: "low" },
+      { id: "m5", name: "Recruitment complete", month: 5, status: "not_started", risk: "high" },
+      { id: "m6", name: "Training programme delivered", month: 7, status: "not_started", risk: "medium" },
+    ],
+  },
+  {
+    id: "ws3", name: "Systems and Data", color: WORKSTREAM_COLORS[2],
+    milestones: [
+      { id: "m7", name: "Requirements gathered", month: 2, status: "not_started", risk: "low" },
+      { id: "m8", name: "System procured / configured", month: 5, status: "not_started", risk: "high" },
+      { id: "m9", name: "Data migration complete", month: 7, status: "not_started", risk: "high" },
+    ],
+  },
+  {
+    id: "ws4", name: "Governance and Compliance", color: WORKSTREAM_COLORS[3],
+    milestones: [
+      { id: "m10", name: "Policy framework updated", month: 3, status: "not_started", risk: "medium" },
+      { id: "m11", name: "Safeguarding review complete", month: 4, status: "not_started", risk: "low" },
+      { id: "m12", name: "Board sign-off on go-live", month: 8, status: "not_started", risk: "medium" },
+    ],
+  },
+];
+
+const RISK_COLORS = { low: "#34d399", medium: "#fb923c", high: "#f43f5e" };
+const STATUS_LABELS = { not_started: "Not started", in_progress: "In progress", complete: "Complete", blocked: "Blocked" };
+const STATUS_COLORS = { not_started: "#475569", in_progress: "#22d3ee", complete: "#34d399", blocked: "#f43f5e" };
+
+function generateId() { return "id_" + Math.random().toString(36).substr(2, 9); }
+
+function App() {
+  const [workstreams, setWorkstreams] = useState(DEFAULT_WORKSTREAMS);
+  const [totalMonths, setTotalMonths] = useState(12);
+  const [projectName, setProjectName] = useState("Transformation Programme");
+  const [activeTab, setActiveTab] = useState("roadmap");
+  const [showInstructions, setShowInstructions] = useState(false);
+
+  const handleSave = useCallback(() => { downloadJSON({ workstreams, totalMonths, projectName, activeTab, savedAt: new Date().toISOString() }, "BS_Roadmap_Session.json"); }, [workstreams, totalMonths, projectName, activeTab]);
+  const handleLoad = useCallback((data) => {
+    if (data.workstreams) setWorkstreams(data.workstreams); if (data.totalMonths) setTotalMonths(data.totalMonths);
+    if (data.projectName) setProjectName(data.projectName); if (data.activeTab) setActiveTab(data.activeTab);
+  }, []);
+
+  const months = Array.from({ length: totalMonths }, (_, i) => i + 1);
+
+  const allMilestones = useMemo(() => {
+    const ms = [];
+    workstreams.forEach(ws => { ws.milestones.forEach(m => { ms.push({ ...m, workstreamId: ws.id, workstreamName: ws.name, color: ws.color }); }); });
+    return ms.sort((a, b) => a.month - b.month);
+  }, [workstreams]);
+
+  const criticalPath = useMemo(() => {
+    const lastPerWs = {};
+    allMilestones.forEach(m => { if (!lastPerWs[m.workstreamId] || m.month > lastPerWs[m.workstreamId].month) lastPerWs[m.workstreamId] = m; });
+    const latest = Object.values(lastPerWs).sort((a, b) => b.month - a.month);
+    return latest[0]?.month || 0;
+  }, [allMilestones]);
+
+  const riskSummary = useMemo(() => {
+    const counts = { low: 0, medium: 0, high: 0 };
+    allMilestones.forEach(m => { counts[m.risk]++; });
+    return counts;
+  }, [allMilestones]);
+
+  const statusSummary = useMemo(() => {
+    const counts = { not_started: 0, in_progress: 0, complete: 0, blocked: 0 };
+    allMilestones.forEach(m => { counts[m.status]++; });
+    return counts;
+  }, [allMilestones]);
+
+  // Workstream CRUD
+  const addWorkstream = () => {
+    const idx = workstreams.length;
+    setWorkstreams(prev => [...prev, {
+      id: generateId(), name: "New Workstream", color: WORKSTREAM_COLORS[idx % WORKSTREAM_COLORS.length],
+      milestones: [{ id: generateId(), name: "First milestone", month: 3, status: "not_started", risk: "low" }],
+    }]);
+  };
+
+  const removeWorkstream = (wsId) => {
+    if (workstreams.length <= 1) return;
+    setWorkstreams(prev => prev.filter(ws => ws.id !== wsId));
+  };
+
+  const updateWorkstream = (wsId, field, val) => {
+    setWorkstreams(prev => prev.map(ws => ws.id === wsId ? { ...ws, [field]: val } : ws));
+  };
+
+  const addMilestone = (wsId) => {
+    setWorkstreams(prev => prev.map(ws => ws.id === wsId ? {
+      ...ws, milestones: [...ws.milestones, { id: generateId(), name: "New milestone", month: 3, status: "not_started", risk: "low" }]
+    } : ws));
+  };
+
+  const removeMilestone = (wsId, mId) => {
+    setWorkstreams(prev => prev.map(ws => ws.id === wsId ? { ...ws, milestones: ws.milestones.filter(m => m.id !== mId) } : ws));
+  };
+
+  const updateMilestone = (wsId, mId, field, val) => {
+    setWorkstreams(prev => prev.map(ws => ws.id === wsId ? {
+      ...ws, milestones: ws.milestones.map(m => m.id === mId ? { ...m, [field]: val } : m)
+    } : ws));
+  };
+
+  const tabs = [{ id: "roadmap", label: "Roadmap" }, { id: "milestones", label: "Edit Milestones" }, { id: "summary", label: "Summary" }];
+
+  return (
+    <div style={{ fontFamily: "'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif", background: "#0f172a", color: "#e2e8f0", minHeight: "100vh", padding: "24px 20px" }}>
+      <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ fontSize: 10, color: "#34d399", textTransform: "uppercase", letterSpacing: "0.15em", fontWeight: 600, marginBottom: 4 }}>Bontle Senne Consulting</div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+          <div>
+            <h1 style={{ fontSize: 24, fontWeight: 700, color: "#f1f5f9", margin: 0, lineHeight: 1.2 }}>Transformation Roadmap</h1>
+            <p style={{ fontSize: 13, color: "#64748b", marginTop: 6, marginBottom: 0 }}>Build a visual delivery plan with workstreams, milestones, and risk indicators. Adjust live in the session.</p>
+            <div style={{ marginTop: 12 }}><ExportToolbar onSave={handleSave} onLoad={handleLoad} /></div>
+          </div>
+          <button onClick={() => setShowInstructions(!showInstructions)} style={{ padding: "6px 14px", borderRadius: 20, border: "1px solid #334155", background: "transparent", color: "#94a3b8", fontSize: 12, cursor: "pointer" }}>{showInstructions ? "Hide" : "How to use"}</button>
+        </div>
+      </div>
+
+      {showInstructions && (
+        <div style={{ background: "#1e293b", borderRadius: 10, padding: 20, marginBottom: 24, borderLeft: "3px solid #34d399", fontSize: 13, color: "#94a3b8", lineHeight: 1.7 }}>
+          <strong style={{ color: "#f1f5f9" }}>Workshop facilitation guide</strong>
+          <ol style={{ paddingLeft: 20, marginTop: 8 }}>
+            <li><strong style={{ color: "#e2e8f0" }}>Set the programme name and duration</strong> -- adjust the fields above the roadmap.</li>
+            <li><strong style={{ color: "#e2e8f0" }}>Define workstreams</strong> -- these are the parallel tracks of work (e.g. service design, people, systems, governance).</li>
+            <li><strong style={{ color: "#e2e8f0" }}>Add milestones</strong> -- each milestone is a deliverable or decision point. Place it in the month it needs to land.</li>
+            <li><strong style={{ color: "#e2e8f0" }}>Flag risk levels</strong> -- green (low), amber (medium), red (high). This surfaces where the plan is vulnerable.</li>
+            <li><strong style={{ color: "#e2e8f0" }}>Update status</strong> -- use this post-workshop to track progress, or during the session to mark items the team has already resolved.</li>
+            <li><strong style={{ color: "#e2e8f0" }}>Review the summary</strong> -- see the critical path, risk distribution, and milestone counts at a glance.</li>
+          </ol>
+        </div>
+      )}
+
+      {/* Project settings */}
+      <div style={{ display: "flex", gap: 16, marginBottom: 20, alignItems: "center", flexWrap: "wrap" }}>
+        <div>
+          <label style={{ fontSize: 11, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 4 }}>Programme name</label>
+          <input value={projectName} onChange={e => setProjectName(e.target.value)} style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 6, padding: "8px 12px", color: "#f1f5f9", fontSize: 14, fontWeight: 600, width: 280 }} />
+        </div>
+        <div>
+          <label style={{ fontSize: 11, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 4 }}>Duration</label>
+          <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+            <input type="number" value={totalMonths} onChange={e => setTotalMonths(Math.max(3, Math.min(36, parseInt(e.target.value) || 12)))} min={3} max={36} style={{ width: 60, background: "#0f172a", border: "1px solid #334155", borderRadius: 6, padding: "8px 10px", color: "#e2e8f0", fontSize: 14, fontFamily: "'JetBrains Mono', monospace", textAlign: "right" }} />
+            <span style={{ fontSize: 12, color: "#64748b" }}>months</span>
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 12, alignItems: "flex-end", paddingBottom: 2 }}>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: "#f1f5f9", fontFamily: "'JetBrains Mono', monospace" }}>{allMilestones.length}</div>
+            <div style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase" }}>Milestones</div>
+          </div>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: criticalPath <= totalMonths ? "#34d399" : "#f43f5e", fontFamily: "'JetBrains Mono', monospace" }}>M{criticalPath}</div>
+            <div style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase" }}>Critical path</div>
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            {["low", "medium", "high"].map(r => (
+              <div key={r} style={{ textAlign: "center" }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: RISK_COLORS[r], fontFamily: "'JetBrains Mono', monospace" }}>{riskSummary[r]}</div>
+                <div style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase" }}>{r}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div style={{ display: "flex", gap: 0, marginBottom: 20, borderBottom: "1px solid #1e293b" }}>
+        {tabs.map(tab => (
+          <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{ padding: "10px 18px", background: "transparent", border: "none", borderBottom: activeTab === tab.id ? "2px solid #34d399" : "2px solid transparent", color: activeTab === tab.id ? "#f1f5f9" : "#64748b", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>{tab.label}</button>
+        ))}
+      </div>
+
+      {/* Roadmap view */}
+      {activeTab === "roadmap" && (
+        <div style={{ overflowX: "auto" }}>
+          {/* Month headers */}
+          <div style={{ display: "flex", marginBottom: 4, paddingLeft: 180 }}>
+            {months.map(m => (
+              <div key={m} style={{ flex: 1, minWidth: 60, textAlign: "center", fontSize: 10, color: "#64748b", fontFamily: "'JetBrains Mono', monospace", padding: "4px 0", borderLeft: "1px solid #1e293b" }}>
+                M{m}
+              </div>
+            ))}
+          </div>
+
+          {/* Workstream rows */}
+          {workstreams.map(ws => (
+            <div key={ws.id} style={{ display: "flex", alignItems: "stretch", marginBottom: 8 }}>
+              {/* Label */}
+              <div style={{ width: 180, minWidth: 180, padding: "8px 12px 8px 0", display: "flex", alignItems: "center", gap: 8 }}>
+                <div style={{ width: 8, height: 8, borderRadius: "50%", background: ws.color, flexShrink: 0 }} />
+                <span style={{ fontSize: 12, fontWeight: 600, color: "#f1f5f9", lineHeight: 1.3 }}>{ws.name}</span>
+              </div>
+
+              {/* Timeline */}
+              <div style={{ flex: 1, display: "flex", position: "relative", minHeight: 48 }}>
+                {months.map(m => (
+                  <div key={m} style={{ flex: 1, minWidth: 60, borderLeft: "1px solid #1e293b", position: "relative" }}>
+                    {/* Milestones in this month */}
+                    {ws.milestones.filter(ml => ml.month === m).map(ml => (
+                      <div key={ml.id} title={ml.name + " (Risk: " + ml.risk + ", Status: " + STATUS_LABELS[ml.status] + ")"} style={{
+                        position: "relative", margin: "4px 4px", padding: "4px 8px", borderRadius: 6,
+                        background: "rgba(" + (ml.risk === "high" ? "244,63,94" : ml.risk === "medium" ? "251,146,60" : "52,211,153") + ",0.12)",
+                        border: "1px solid " + RISK_COLORS[ml.risk],
+                        cursor: "default",
+                      }}>
+                        <div style={{ fontSize: 10, fontWeight: 600, color: "#f1f5f9", lineHeight: 1.3 }}>{ml.name}</div>
+                        <div style={{ display: "flex", gap: 6, marginTop: 2, alignItems: "center" }}>
+                          <div style={{ width: 6, height: 6, borderRadius: "50%", background: STATUS_COLORS[ml.status] }} />
+                          <span style={{ fontSize: 9, color: "#64748b" }}>{STATUS_LABELS[ml.status]}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+
+                {/* Workstream bar */}
+                {(() => {
+                  const wsMonths = ws.milestones.map(m => m.month);
+                  if (wsMonths.length === 0) return null;
+                  const startM = Math.min(...wsMonths);
+                  const endM = Math.max(...wsMonths);
+                  const leftPct = ((startM - 1) / totalMonths) * 100;
+                  const widthPct = ((endM - startM + 1) / totalMonths) * 100;
+                  return (
+                    <div style={{
+                      position: "absolute", bottom: 0, left: leftPct + "%", width: widthPct + "%",
+                      height: 3, background: ws.color, opacity: 0.4, borderRadius: 2,
+                    }} />
+                  );
+                })()}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Edit milestones */}
+      {activeTab === "milestones" && (
+        <div>
+          {workstreams.map(ws => (
+            <div key={ws.id} style={{ marginBottom: 28, background: "#1e293b", borderRadius: 10, padding: 16 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+                <div style={{ width: 12, height: 12, borderRadius: "50%", background: ws.color }} />
+                <input value={ws.name} onChange={e => updateWorkstream(ws.id, "name", e.target.value)} style={{ background: "transparent", border: "none", borderBottom: "1px dashed #334155", color: "#f1f5f9", fontSize: 16, fontWeight: 700, flex: 1, padding: "2px 0" }} />
+                {workstreams.length > 1 && <button onClick={() => removeWorkstream(ws.id)} style={{ background: "none", border: "none", color: "#475569", cursor: "pointer", fontSize: 16 }}>{"\u00D7"}</button>}
+              </div>
+
+              {ws.milestones.map(ml => (
+                <div key={ml.id} style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 8, paddingLeft: 22, flexWrap: "wrap" }}>
+                  <input value={ml.name} onChange={e => updateMilestone(ws.id, ml.id, "name", e.target.value)} style={{ flex: 1, minWidth: 180, background: "#0f172a", border: "1px solid #334155", borderRadius: 6, padding: "6px 10px", color: "#e2e8f0", fontSize: 13 }} />
+                  <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                    <span style={{ fontSize: 11, color: "#64748b" }}>Month:</span>
+                    <input type="number" value={ml.month} onChange={e => updateMilestone(ws.id, ml.id, "month", Math.max(1, Math.min(totalMonths, parseInt(e.target.value) || 1)))} min={1} max={totalMonths} style={{ width: 48, background: "#0f172a", border: "1px solid #334155", borderRadius: 6, padding: "6px 8px", color: "#e2e8f0", fontSize: 13, fontFamily: "'JetBrains Mono', monospace", textAlign: "right" }} />
+                  </div>
+                  <select value={ml.risk} onChange={e => updateMilestone(ws.id, ml.id, "risk", e.target.value)} style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 6, padding: "6px 8px", color: RISK_COLORS[ml.risk], fontSize: 12 }}>
+                    <option value="low">Low risk</option>
+                    <option value="medium">Medium risk</option>
+                    <option value="high">High risk</option>
+                  </select>
+                  <select value={ml.status} onChange={e => updateMilestone(ws.id, ml.id, "status", e.target.value)} style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 6, padding: "6px 8px", color: STATUS_COLORS[ml.status], fontSize: 12 }}>
+                    <option value="not_started">Not started</option>
+                    <option value="in_progress">In progress</option>
+                    <option value="complete">Complete</option>
+                    <option value="blocked">Blocked</option>
+                  </select>
+                  <button onClick={() => removeMilestone(ws.id, ml.id)} style={{ background: "none", border: "none", color: "#475569", cursor: "pointer", fontSize: 14 }}>{"\u00D7"}</button>
+                </div>
+              ))}
+
+              <button onClick={() => addMilestone(ws.id)} style={{ marginLeft: 22, padding: "4px 12px", borderRadius: 16, border: "1px dashed #334155", background: "transparent", color: "#64748b", fontSize: 12, cursor: "pointer", marginTop: 4 }}>+ Add milestone</button>
+            </div>
+          ))}
+
+          <button onClick={addWorkstream} style={{ padding: "8px 16px", borderRadius: 20, border: "1px dashed #334155", background: "transparent", color: "#64748b", fontSize: 13, cursor: "pointer" }}>+ Add workstream</button>
+        </div>
+      )}
+
+      {/* Summary */}
+      {activeTab === "summary" && (
+        <div>
+          <div style={{ background: "#1e293b", borderRadius: 10, padding: 20, marginBottom: 20 }}>
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: "#f1f5f9", marginBottom: 16 }}>{projectName}</h3>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 12, marginBottom: 20 }}>
+              <div style={{ padding: 12, background: "#0f172a", borderRadius: 8, borderLeft: "3px solid #34d399" }}>
+                <div style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase" }}>Duration</div>
+                <div style={{ fontSize: 20, fontWeight: 700, color: "#f1f5f9", fontFamily: "'JetBrains Mono', monospace" }}>{totalMonths} months</div>
+              </div>
+              <div style={{ padding: 12, background: "#0f172a", borderRadius: 8, borderLeft: "3px solid #22d3ee" }}>
+                <div style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase" }}>Workstreams</div>
+                <div style={{ fontSize: 20, fontWeight: 700, color: "#f1f5f9", fontFamily: "'JetBrains Mono', monospace" }}>{workstreams.length}</div>
+              </div>
+              <div style={{ padding: 12, background: "#0f172a", borderRadius: 8, borderLeft: "3px solid #a78bfa" }}>
+                <div style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase" }}>Total milestones</div>
+                <div style={{ fontSize: 20, fontWeight: 700, color: "#f1f5f9", fontFamily: "'JetBrains Mono', monospace" }}>{allMilestones.length}</div>
+              </div>
+              <div style={{ padding: 12, background: "#0f172a", borderRadius: 8, borderLeft: criticalPath <= totalMonths ? "3px solid #34d399" : "3px solid #f43f5e" }}>
+                <div style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase" }}>Critical path ends</div>
+                <div style={{ fontSize: 20, fontWeight: 700, color: criticalPath <= totalMonths ? "#34d399" : "#f43f5e", fontFamily: "'JetBrains Mono', monospace" }}>Month {criticalPath}</div>
+              </div>
+            </div>
+
+            {/* Status breakdown */}
+            <h4 style={{ fontSize: 12, color: "#94a3b8", fontWeight: 600, textTransform: "uppercase", marginBottom: 10 }}>Status</h4>
+            <div style={{ display: "flex", gap: 8, marginBottom: 20, height: 28, borderRadius: 6, overflow: "hidden" }}>
+              {Object.entries(statusSummary).filter(([,v]) => v > 0).map(([status, count]) => (
+                <div key={status} title={STATUS_LABELS[status] + ": " + count} style={{ flex: count, background: STATUS_COLORS[status], opacity: 0.8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "#0f172a" }}>
+                  {count > 0 && STATUS_LABELS[status] + " (" + count + ")"}
+                </div>
+              ))}
+            </div>
+
+            {/* Risk breakdown */}
+            <h4 style={{ fontSize: 12, color: "#94a3b8", fontWeight: 600, textTransform: "uppercase", marginBottom: 10 }}>Risk distribution</h4>
+            <div style={{ display: "flex", gap: 8, marginBottom: 20, height: 28, borderRadius: 6, overflow: "hidden" }}>
+              {["low", "medium", "high"].filter(r => riskSummary[r] > 0).map(r => (
+                <div key={r} title={r + " risk: " + riskSummary[r]} style={{ flex: riskSummary[r], background: RISK_COLORS[r], opacity: 0.8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "#0f172a" }}>
+                  {r.charAt(0).toUpperCase() + r.slice(1) + " (" + riskSummary[r] + ")"}
+                </div>
+              ))}
+            </div>
+
+            {/* Milestone list by month */}
+            <h4 style={{ fontSize: 12, color: "#94a3b8", fontWeight: 600, textTransform: "uppercase", marginBottom: 10 }}>Milestone schedule</h4>
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                <thead>
+                  <tr style={{ borderBottom: "2px solid #334155" }}>
+                    {["Month", "Workstream", "Milestone", "Risk", "Status"].map(h => (
+                      <th key={h} style={{ padding: "8px 10px", textAlign: "left", color: "#94a3b8", fontWeight: 600, fontSize: 11, textTransform: "uppercase" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {allMilestones.map(m => (
+                    <tr key={m.id} style={{ borderBottom: "1px solid #0f172a" }}>
+                      <td style={{ padding: "8px 10px", fontFamily: "'JetBrains Mono', monospace", color: "#64748b" }}>M{m.month}</td>
+                      <td style={{ padding: "8px 10px" }}>
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                          <span style={{ width: 8, height: 8, borderRadius: "50%", background: m.color, display: "inline-block" }} />
+                          <span style={{ color: "#e2e8f0" }}>{m.workstreamName}</span>
+                        </span>
+                      </td>
+                      <td style={{ padding: "8px 10px", color: "#f1f5f9", fontWeight: 500 }}>{m.name}</td>
+                      <td style={{ padding: "8px 10px" }}>
+                        <span style={{ padding: "2px 8px", borderRadius: 10, fontSize: 10, fontWeight: 600, background: "rgba(" + (m.risk === "high" ? "244,63,94" : m.risk === "medium" ? "251,146,60" : "52,211,153") + ",0.15)", color: RISK_COLORS[m.risk] }}>{m.risk}</span>
+                      </td>
+                      <td style={{ padding: "8px 10px" }}>
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                          <span style={{ width: 6, height: 6, borderRadius: "50%", background: STATUS_COLORS[m.status] }} />
+                          <span style={{ fontSize: 11, color: STATUS_COLORS[m.status] }}>{STATUS_LABELS[m.status]}</span>
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div style={{ marginTop: 32, padding: "16px 0", borderTop: "1px solid #1e293b", fontSize: 11, color: "#475569", lineHeight: 1.6 }}>
+        <strong style={{ color: "#94a3b8" }}>Roadmap notes:</strong> This is a planning tool, not a project management system. Use it to capture the delivery shape during workshops, then transfer milestones and dependencies into your programme management tooling. Critical path is calculated as the latest milestone across all workstreams.
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
