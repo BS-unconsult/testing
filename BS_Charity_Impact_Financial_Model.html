@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bontle Senne Consulting — Impact and Financial Model</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0f172a; }
+  #root { min-height: 100vh; }
+  @media print {
+    body { background: #fff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    [data-no-print] { display: none !important; }
+  }
+</style>
+<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useCallback, useMemo, useRef } = React;
+
+function downloadJSON(data, filename) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function ExportToolbar({ onSave, onLoad, filename }) {
+  const fileRef = useRef(null);
+  return (
+    <div data-no-print style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+      <button onClick={() => window.print()} style={{ padding: "6px 14px", borderRadius: 20, border: "1px solid #334155", background: "transparent", color: "#94a3b8", fontSize: 12, cursor: "pointer" }}>Print / Save as PDF</button>
+      <button onClick={onSave} style={{ padding: "6px 14px", borderRadius: 20, border: "1px solid #334155", background: "transparent", color: "#94a3b8", fontSize: 12, cursor: "pointer" }}>Save session</button>
+      <button onClick={() => fileRef.current?.click()} style={{ padding: "6px 14px", borderRadius: 20, border: "1px solid #334155", background: "transparent", color: "#94a3b8", fontSize: 12, cursor: "pointer" }}>Load session</button>
+      <input ref={fileRef} type="file" accept=".json" style={{ display: "none" }} onChange={e => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = ev => { try { onLoad(JSON.parse(ev.target.result)); } catch(err) { alert("Could not read session file."); } };
+        reader.readAsText(file);
+        e.target.value = "";
+      }} />
+    </div>
+  );
+}
+
+const INITIAL_ASSUMPTIONS = {
+  // Income streams
+  individualDonorsBase: 12000,
+  avgGiftPerMonth: 12,
+  donorAttritionPct: 5.5,
+  newDonorAcquisitionPerMonth: 150,
+  acquisitionCostPerDonor: 85,
+  
+  // Trust and grant funding
+  trustGrantsAnnual: 350000,
+  trustGrowthPct: 3,
+  trustRenewalPct: 65,
+  newTrustApplicationsPerYear: 15,
+  avgNewTrustGrant: 25000,
+  trustSuccessRate: 30,
+  
+  // Statutory / contract income
+  statutoryContractAnnual: 500000,
+  statutoryGrowthPct: 1,
+  contractRenewalRisk: 15,
+  
+  // Programme costs
+  costPerBeneficiary: 180,
+  beneficiariesCurrentAnnual: 5000,
+  beneficiaryGrowthTarget: 15,
+  
+  // Overheads
+  staffCostsPerMonth: 85000,
+  premisesPerMonth: 12000,
+  systemsAndOpsCostPerMonth: 8000,
+  fundraisingCostPerMonth: 15000,
+  
+  // Reserves
+  currentReserves: 400000,
+  targetReserveMonths: 3,
+};
+
+const STREAM_PRESETS = {
+  "Regular individual donors": {
+    individualDonorsBase: 12000, avgGiftPerMonth: 12, donorAttritionPct: 5.5,
+    newDonorAcquisitionPerMonth: 150, acquisitionCostPerDonor: 85,
+  },
+  "Major donors and trusts": {
+    trustGrantsAnnual: 600000, trustGrowthPct: 5, trustRenewalPct: 70,
+    newTrustApplicationsPerYear: 20, avgNewTrustGrant: 40000, trustSuccessRate: 35,
+  },
+  "Corporate partnerships": {
+    trustGrantsAnnual: 250000, trustGrowthPct: 8, trustRenewalPct: 55,
+    newTrustApplicationsPerYear: 10, avgNewTrustGrant: 30000, trustSuccessRate: 25,
+  },
+  "Statutory funding": {
+    statutoryContractAnnual: 800000, statutoryGrowthPct: 0, contractRenewalRisk: 25,
+  },
+  "Custom": {},
+};
+
+const MONTHS = 24;
+
+function fmt(val) {
+  if (Math.abs(val) >= 1000000) return "\u00A3" + (val / 1000000).toFixed(2) + "m";
+  if (Math.abs(val) >= 1000) return "\u00A3" + (val / 1000).toFixed(0) + "k";
+  return "\u00A3" + val.toFixed(0);
+}
+function fmtN(val) {
+  if (val >= 1000000) return (val / 1000000).toFixed(2) + "m";
+  if (val >= 1000) return (val / 1000).toFixed(1) + "k";
+  return val.toFixed(0);
+}
+
+function InputField({ label, value, onChange, suffix, min, max, step, help }) {
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>
+        {label}
+        {help && <span style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0, marginLeft: 6, color: "#64748b" }}>{help}</span>}
+      </label>
+      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <input type="number" value={value} onChange={e => onChange(parseFloat(e.target.value) || 0)} min={min} max={max} step={step || 1}
+          style={{ width: "100%", padding: "8px 10px", border: "1px solid #334155", borderRadius: 6, background: "#0f172a", color: "#e2e8f0", fontSize: 14, fontFamily: "'JetBrains Mono', monospace" }} />
+        {suffix && <span style={{ fontSize: 12, color: "#64748b", whiteSpace: "nowrap" }}>{suffix}</span>}
+      </div>
+    </div>
+  );
+}
+
+function computeModel(a) {
+  const months = [];
+  let activeDonors = a.individualDonorsBase;
+  let cumulativeIncome = 0;
+  let cumulativeCost = 0;
+  let reserves = a.currentReserves;
+
+  for (let m = 1; m <= MONTHS; m++) {
+    // Donor dynamics
+    const churned = Math.round(activeDonors * (a.donorAttritionPct / 100));
+    const acquired = a.newDonorAcquisitionPerMonth;
+    activeDonors = activeDonors - churned + acquired;
+    const donorIncome = activeDonors * a.avgGiftPerMonth;
+    const acquisitionCost = acquired * a.acquisitionCostPerDonor;
+
+    // Trust/grant income (spread monthly, with annual renewal logic)
+    const yearMultiplier = 1 + (a.trustGrowthPct / 100) * Math.floor((m - 1) / 12);
+    const renewedTrustBase = a.trustGrantsAnnual * (a.trustRenewalPct / 100) * yearMultiplier;
+    const newTrustIncome = (a.newTrustApplicationsPerYear / 12) * a.avgNewTrustGrant * (a.trustSuccessRate / 100);
+    const trustIncome = (renewedTrustBase / 12) + newTrustIncome;
+
+    // Statutory income
+    const statYearMultiplier = 1 + (a.statutoryGrowthPct / 100) * Math.floor((m - 1) / 12);
+    const statutoryBase = a.statutoryContractAnnual * statYearMultiplier;
+    const statutoryRiskAdjusted = statutoryBase * (1 - a.contractRenewalRisk / 100);
+    const statutoryIncome = statutoryRiskAdjusted / 12;
+
+    const totalIncome = donorIncome + trustIncome + statutoryIncome;
+
+    // Beneficiaries (growing towards target)
+    const growthPerMonth = (a.beneficiariesCurrentAnnual * (a.beneficiaryGrowthTarget / 100)) / 12;
+    const beneficiariesThisMonth = a.beneficiariesCurrentAnnual / 12 + growthPerMonth * Math.min(m, 12) / 12;
+    const programmeCost = beneficiariesThisMonth * a.costPerBeneficiary;
+
+    // Overheads
+    const overheads = a.staffCostsPerMonth + a.premisesPerMonth + a.systemsAndOpsCostPerMonth + a.fundraisingCostPerMonth;
+    const totalCost = programmeCost + overheads + acquisitionCost;
+
+    const netPosition = totalIncome - totalCost;
+    cumulativeIncome += totalIncome;
+    cumulativeCost += totalCost;
+    reserves += netPosition;
+
+    const monthlyOverheads = a.staffCostsPerMonth + a.premisesPerMonth + a.systemsAndOpsCostPerMonth + a.fundraisingCostPerMonth;
+    const targetReserves = monthlyOverheads * a.targetReserveMonths;
+
+    months.push({
+      month: m, activeDonors, donorIncome, trustIncome, statutoryIncome, totalIncome,
+      programmeCost, overheads, acquisitionCost, totalCost, netPosition,
+      cumulativeIncome, cumulativeCost, reserves, beneficiaries: Math.round(beneficiariesThisMonth),
+      reservesAdequate: reserves >= targetReserves, targetReserves,
+    });
+  }
+
+  const monthlyOverheads = a.staffCostsPerMonth + a.premisesPerMonth + a.systemsAndOpsCostPerMonth + a.fundraisingCostPerMonth;
+
+  return {
+    months,
+    summary: {
+      year1Income: months.slice(0, 12).reduce((s, m) => s + m.totalIncome, 0),
+      year2Income: months.slice(12, 24).reduce((s, m) => s + m.totalIncome, 0),
+      year1Cost: months.slice(0, 12).reduce((s, m) => s + m.totalCost, 0),
+      year2Cost: months.slice(12, 24).reduce((s, m) => s + m.totalCost, 0),
+      year1Net: months.slice(0, 12).reduce((s, m) => s + m.netPosition, 0),
+      year2Net: months.slice(12, 24).reduce((s, m) => s + m.netPosition, 0),
+      month24Donors: months[23]?.activeDonors || 0,
+      month24Reserves: months[23]?.reserves || 0,
+      targetReserves: monthlyOverheads * a.targetReserveMonths,
+      peakBeneficiaries: Math.max(...months.map(m => m.beneficiaries)),
+      donorDependency: months[23] ? (months[23].donorIncome / months[23].totalIncome * 100) : 0,
+      statutoryDependency: months[23] ? (months[23].statutoryIncome / months[23].totalIncome * 100) : 0,
+    },
+  };
+}
+
+function MiniChart({ data, dataKey, color, height = 120 }) {
+  const maxVal = Math.max(...data.map(d => Math.abs(d[dataKey])), 1);
+  return (
+    <div style={{ position: "relative", height, width: "100%", display: "flex", alignItems: "flex-end", gap: 1 }}>
+      {data.map((d, i) => {
+        const val = d[dataKey];
+        const h = Math.abs(val) / maxVal * (height - 20);
+        return (
+          <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "flex-end", height: "100%" }}>
+            <div title={"Month " + d.month + ": " + fmt(val)} style={{ height: h, background: val < 0 ? "#f43f5e" : color, borderRadius: "2px 2px 0 0", opacity: 0.85, transition: "height 0.3s ease", minHeight: 2 }} />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function KPI({ label, value, subtitle, accent }) {
+  return (
+    <div style={{ background: "#1e293b", borderRadius: 10, padding: "16px 18px", borderLeft: "3px solid " + (accent || "#22d3ee") }}>
+      <div style={{ fontSize: 11, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>{label}</div>
+      <div style={{ fontSize: 22, fontWeight: 700, color: "#f1f5f9", fontFamily: "'JetBrains Mono', monospace" }}>{value}</div>
+      {subtitle && <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>{subtitle}</div>}
+    </div>
+  );
+}
+
+function App() {
+  const [assumptions, setAssumptions] = useState(INITIAL_ASSUMPTIONS);
+  const [selectedPreset, setSelectedPreset] = useState("Custom");
+  const [activeTab, setActiveTab] = useState("assumptions");
+
+  const update = useCallback((key, val) => { setAssumptions(prev => ({ ...prev, [key]: val })); setSelectedPreset("Custom"); }, []);
+  const applyPreset = useCallback((name) => { setSelectedPreset(name); if (name !== "Custom") setAssumptions(prev => ({ ...prev, ...STREAM_PRESETS[name] })); }, []);
+  const model = useMemo(() => computeModel(assumptions), [assumptions]);
+  const tabs = [{ id: "assumptions", label: "Assumptions" }, { id: "results", label: "Results" }, { id: "monthly", label: "Monthly Detail" }];
+
+  const handleSave = useCallback(() => {
+    downloadJSON({ assumptions, selectedPreset, activeTab, savedAt: new Date().toISOString() }, "BS_Impact_Financial_Model_Session.json");
+  }, [assumptions, selectedPreset, activeTab]);
+
+  const handleLoad = useCallback((data) => {
+    if (data.assumptions) setAssumptions(data.assumptions);
+    if (data.selectedPreset) setSelectedPreset(data.selectedPreset);
+    if (data.activeTab) setActiveTab(data.activeTab);
+  }, []);
+
+  return (
+    <div style={{ fontFamily: "'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif", background: "#0f172a", color: "#e2e8f0", minHeight: "100vh", padding: "24px 20px" }}>
+      <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+
+      <div style={{ marginBottom: 24 }}>
+        <div style={{ fontSize: 10, color: "#34d399", textTransform: "uppercase", letterSpacing: "0.15em", fontWeight: 600, marginBottom: 4 }}>Bontle Senne Consulting</div>
+        <h1 style={{ fontSize: 24, fontWeight: 700, color: "#f1f5f9", margin: 0, lineHeight: 1.2 }}>Impact and Financial Model</h1>
+        <p style={{ fontSize: 13, color: "#64748b", marginTop: 6, marginBottom: 0 }}>Model income streams, programme costs, reserves adequacy, and beneficiary reach over 24 months. Adjust assumptions to stress-test sustainability.</p>
+        <div style={{ marginTop: 12 }}><ExportToolbar onSave={handleSave} onLoad={handleLoad} /></div>
+      </div>
+
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ fontSize: 11, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8, fontWeight: 600 }}>Income stream focus</div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {Object.keys(STREAM_PRESETS).map(name => (
+            <button key={name} onClick={() => applyPreset(name)} style={{ padding: "6px 14px", borderRadius: 20, border: selectedPreset === name ? "1px solid #34d399" : "1px solid #334155", background: selectedPreset === name ? "rgba(52,211,153,0.1)" : "transparent", color: selectedPreset === name ? "#34d399" : "#94a3b8", fontSize: 12, cursor: "pointer", fontWeight: 500 }}>{name}</button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(155px, 1fr))", gap: 12, marginBottom: 24 }}>
+        <KPI label="Year 1 income" value={fmt(model.summary.year1Income)} accent="#34d399" />
+        <KPI label="Year 1 net" value={fmt(model.summary.year1Net)} accent={model.summary.year1Net >= 0 ? "#34d399" : "#f43f5e"} />
+        <KPI label="Month 24 reserves" value={fmt(model.summary.month24Reserves)} accent={model.summary.month24Reserves >= model.summary.targetReserves ? "#a78bfa" : "#f43f5e"} subtitle={"Target: " + fmt(model.summary.targetReserves)} />
+        <KPI label="Donor dependency" value={model.summary.donorDependency.toFixed(0) + "%"} accent="#22d3ee" subtitle="of total income at month 24" />
+        <KPI label="Beneficiaries (peak)" value={fmtN(model.summary.peakBeneficiaries)} accent="#fb923c" />
+      </div>
+
+      <div style={{ display: "flex", gap: 0, marginBottom: 20, borderBottom: "1px solid #1e293b" }}>
+        {tabs.map(tab => (
+          <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{ padding: "10px 20px", background: "transparent", border: "none", borderBottom: activeTab === tab.id ? "2px solid #34d399" : "2px solid transparent", color: activeTab === tab.id ? "#f1f5f9" : "#64748b", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>{tab.label}</button>
+        ))}
+      </div>
+
+      {activeTab === "assumptions" && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 24 }}>
+          <div>
+            <h3 style={{ fontSize: 13, color: "#22d3ee", fontWeight: 600, marginBottom: 14, textTransform: "uppercase", letterSpacing: "0.05em" }}>Individual donors</h3>
+            <InputField label="Current donor base" value={assumptions.individualDonorsBase} onChange={v => update("individualDonorsBase", v)} suffix="donors" />
+            <InputField label="Average monthly gift" value={assumptions.avgGiftPerMonth} onChange={v => update("avgGiftPerMonth", v)} suffix={"\u00A3/month"} step={1} />
+            <InputField label="Monthly attrition rate" value={assumptions.donorAttritionPct} onChange={v => update("donorAttritionPct", v)} suffix="%" step={0.1} />
+            <InputField label="New donors acquired" value={assumptions.newDonorAcquisitionPerMonth} onChange={v => update("newDonorAcquisitionPerMonth", v)} suffix="per month" />
+            <InputField label="Acquisition cost" value={assumptions.acquisitionCostPerDonor} onChange={v => update("acquisitionCostPerDonor", v)} suffix={"\u00A3/donor"} step={5} />
+          </div>
+          <div>
+            <h3 style={{ fontSize: 13, color: "#a78bfa", fontWeight: 600, marginBottom: 14, textTransform: "uppercase", letterSpacing: "0.05em" }}>Trusts, grants, and partnerships</h3>
+            <InputField label="Current annual trust income" value={assumptions.trustGrantsAnnual} onChange={v => update("trustGrantsAnnual", v)} suffix={"\u00A3/year"} />
+            <InputField label="Annual growth" value={assumptions.trustGrowthPct} onChange={v => update("trustGrowthPct", v)} suffix="%" step={0.5} />
+            <InputField label="Renewal rate" value={assumptions.trustRenewalPct} onChange={v => update("trustRenewalPct", v)} suffix="%" min={0} max={100} />
+            <InputField label="New applications per year" value={assumptions.newTrustApplicationsPerYear} onChange={v => update("newTrustApplicationsPerYear", v)} />
+            <InputField label="Average new grant value" value={assumptions.avgNewTrustGrant} onChange={v => update("avgNewTrustGrant", v)} suffix={"\u00A3"} />
+            <InputField label="Application success rate" value={assumptions.trustSuccessRate} onChange={v => update("trustSuccessRate", v)} suffix="%" min={0} max={100} />
+          </div>
+          <div>
+            <h3 style={{ fontSize: 13, color: "#fb923c", fontWeight: 600, marginBottom: 14, textTransform: "uppercase", letterSpacing: "0.05em" }}>Statutory and contract income</h3>
+            <InputField label="Current annual contract value" value={assumptions.statutoryContractAnnual} onChange={v => update("statutoryContractAnnual", v)} suffix={"\u00A3/year"} />
+            <InputField label="Annual growth" value={assumptions.statutoryGrowthPct} onChange={v => update("statutoryGrowthPct", v)} suffix="%" step={0.5} />
+            <InputField label="Renewal risk discount" value={assumptions.contractRenewalRisk} onChange={v => update("contractRenewalRisk", v)} suffix="%" min={0} max={100} />
+            <div style={{ fontSize: 11, color: "#475569", marginTop: 8, lineHeight: 1.6 }}>Renewal risk discounts statutory income to reflect the probability that contracts may not be renewed. Set to 0% if contracts are confirmed.</div>
+          </div>
+          <div>
+            <h3 style={{ fontSize: 13, color: "#34d399", fontWeight: 600, marginBottom: 14, textTransform: "uppercase", letterSpacing: "0.05em" }}>Programme and impact</h3>
+            <InputField label="Cost per beneficiary" value={assumptions.costPerBeneficiary} onChange={v => update("costPerBeneficiary", v)} suffix={"\u00A3"} step={5} />
+            <InputField label="Current annual beneficiaries" value={assumptions.beneficiariesCurrentAnnual} onChange={v => update("beneficiariesCurrentAnnual", v)} />
+            <InputField label="Beneficiary growth target" value={assumptions.beneficiaryGrowthTarget} onChange={v => update("beneficiaryGrowthTarget", v)} suffix="% year 1" min={0} />
+            <h3 style={{ fontSize: 13, color: "#f43f5e", fontWeight: 600, marginBottom: 14, marginTop: 20, textTransform: "uppercase", letterSpacing: "0.05em" }}>Overheads and reserves</h3>
+            <InputField label="Staff costs" value={assumptions.staffCostsPerMonth} onChange={v => update("staffCostsPerMonth", v)} suffix={"\u00A3/month"} />
+            <InputField label="Premises" value={assumptions.premisesPerMonth} onChange={v => update("premisesPerMonth", v)} suffix={"\u00A3/month"} />
+            <InputField label="Systems and operations" value={assumptions.systemsAndOpsCostPerMonth} onChange={v => update("systemsAndOpsCostPerMonth", v)} suffix={"\u00A3/month"} />
+            <InputField label="Fundraising costs" value={assumptions.fundraisingCostPerMonth} onChange={v => update("fundraisingCostPerMonth", v)} suffix={"\u00A3/month"} />
+            <InputField label="Current reserves" value={assumptions.currentReserves} onChange={v => update("currentReserves", v)} suffix={"\u00A3"} />
+            <InputField label="Target reserves" value={assumptions.targetReserveMonths} onChange={v => update("targetReserveMonths", v)} suffix="months of overheads" min={1} max={12} />
+          </div>
+        </div>
+      )}
+
+      {activeTab === "results" && (
+        <div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, marginBottom: 32 }}>
+            <div>
+              <h3 style={{ fontSize: 13, color: "#94a3b8", fontWeight: 600, marginBottom: 12 }}>Total Income (monthly)</h3>
+              <MiniChart data={model.months} dataKey="totalIncome" color="#34d399" height={140} />
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "#475569", marginTop: 4 }}><span>Month 1</span><span>Month 24</span></div>
+            </div>
+            <div>
+              <h3 style={{ fontSize: 13, color: "#94a3b8", fontWeight: 600, marginBottom: 12 }}>Net Position (monthly)</h3>
+              <MiniChart data={model.months} dataKey="netPosition" color="#22d3ee" height={140} />
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "#475569", marginTop: 4 }}><span>Month 1</span><span>Month 24</span></div>
+            </div>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
+            <div>
+              <h3 style={{ fontSize: 13, color: "#94a3b8", fontWeight: 600, marginBottom: 12 }}>Reserves</h3>
+              <MiniChart data={model.months} dataKey="reserves" color="#a78bfa" height={140} />
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "#475569", marginTop: 4 }}><span>Month 1</span><span>Month 24</span></div>
+            </div>
+            <div>
+              <h3 style={{ fontSize: 13, color: "#94a3b8", fontWeight: 600, marginBottom: 12 }}>Active Donors</h3>
+              <MiniChart data={model.months} dataKey="activeDonors" color="#fb923c" height={140} />
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "#475569", marginTop: 4 }}><span>Month 1</span><span>Month 24</span></div>
+            </div>
+          </div>
+          <div style={{ marginTop: 32, background: "#1e293b", borderRadius: 10, padding: 20 }}>
+            <h3 style={{ fontSize: 14, color: "#f1f5f9", fontWeight: 600, marginBottom: 16 }}>24-Month Summary</h3>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }}>
+              {[
+                { label: "Year 1 Income", val: model.summary.year1Income },
+                { label: "Year 2 Income", val: model.summary.year2Income },
+                { label: "Total Income", val: model.summary.year1Income + model.summary.year2Income },
+                { label: "Year 1 Net", val: model.summary.year1Net },
+                { label: "Year 2 Net", val: model.summary.year2Net },
+                { label: "Total Net", val: model.summary.year1Net + model.summary.year2Net },
+                { label: "Month 24 Reserves", val: model.summary.month24Reserves },
+                { label: "Statutory Dependency", val: model.summary.statutoryDependency, isPct: true },
+                { label: "Month 24 Donors", val: model.summary.month24Donors, isNum: true },
+              ].map((item, i) => (
+                <div key={i} style={{ padding: "10px 0", borderBottom: "1px solid #334155" }}>
+                  <div style={{ fontSize: 11, color: "#64748b" }}>{item.label}</div>
+                  <div style={{ fontSize: 16, fontWeight: 600, fontFamily: "'JetBrains Mono', monospace", color: item.isPct ? "#e2e8f0" : item.isNum ? "#e2e8f0" : item.val >= 0 ? "#34d399" : "#f43f5e" }}>
+                    {item.isPct ? item.val.toFixed(0) + "%" : item.isNum ? fmtN(item.val) : fmt(item.val)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === "monthly" && (
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, fontFamily: "'JetBrains Mono', monospace" }}>
+            <thead>
+              <tr style={{ borderBottom: "2px solid #334155" }}>
+                {["Mth", "Donors", "Donor Inc", "Trust Inc", "Stat Inc", "Total Inc", "Prog Cost", "Overheads", "Total Cost", "Net", "Reserves"].map(h => (
+                  <th key={h} style={{ padding: "8px 6px", textAlign: "right", color: "#94a3b8", fontWeight: 600, fontSize: 10, textTransform: "uppercase" }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {model.months.map(m => (
+                <tr key={m.month} style={{ borderBottom: "1px solid #1e293b" }}>
+                  <td style={{ padding: "6px", textAlign: "right", color: "#94a3b8" }}>{m.month}</td>
+                  <td style={{ padding: "6px", textAlign: "right" }}>{fmtN(m.activeDonors)}</td>
+                  <td style={{ padding: "6px", textAlign: "right", color: "#22d3ee" }}>{fmt(m.donorIncome)}</td>
+                  <td style={{ padding: "6px", textAlign: "right", color: "#a78bfa" }}>{fmt(m.trustIncome)}</td>
+                  <td style={{ padding: "6px", textAlign: "right", color: "#fb923c" }}>{fmt(m.statutoryIncome)}</td>
+                  <td style={{ padding: "6px", textAlign: "right", color: "#34d399" }}>{fmt(m.totalIncome)}</td>
+                  <td style={{ padding: "6px", textAlign: "right", color: "#f43f5e" }}>{fmt(m.programmeCost)}</td>
+                  <td style={{ padding: "6px", textAlign: "right", color: "#f43f5e" }}>{fmt(m.overheads)}</td>
+                  <td style={{ padding: "6px", textAlign: "right", color: "#f43f5e" }}>{fmt(m.totalCost)}</td>
+                  <td style={{ padding: "6px", textAlign: "right", fontWeight: 600, color: m.netPosition >= 0 ? "#34d399" : "#f43f5e" }}>{fmt(m.netPosition)}</td>
+                  <td style={{ padding: "6px", textAlign: "right", color: m.reservesAdequate ? "#a78bfa" : "#f43f5e" }}>{fmt(m.reserves)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <div style={{ marginTop: 32, padding: "16px 0", borderTop: "1px solid #1e293b", fontSize: 11, color: "#475569", lineHeight: 1.6 }}>
+        <strong style={{ color: "#94a3b8" }}>Model notes:</strong> Donor income modelled with monthly attrition and acquisition. Trust/grant income reflects renewal rates and new application pipeline. Statutory income discounted by renewal risk. Reserves tracked against Charity Commission guidance for target months of operating costs. All figures illustrative and should be calibrated with your own data.
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
