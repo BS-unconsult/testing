@@ -1,4 +1,5 @@
 # Checkpoint index (newest first)
+- 2026-07-29 — Ops-dashboard round: 13 PRs, #75/#76 closed — 2026-07-29-ops-dashboard-round.md — main
 - 2026-07-27 — Bundl outage + v27Jul26 feedback round — 2026-07-27-bundl-outage-feedback-round.md — main
 - 2026-07-27 — External security docs regenerated — 2026-07-27-external-docs-regenerated.md — claude/sync-checklist-doc-regen
 - 2026-07-26 — Cartographer security gaps and required MFA — 2026-07-26-cartographer-security-mfa.md — main
