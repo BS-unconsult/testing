@@ -1,32 +1,38 @@
-# Session checkpoint — 2026-07-27 — Bundl outage + v27Jul26 feedback round
+# Session checkpoint — 2026-07-29 — Ops-dashboard round: 13 PRs, #75/#76 closed
 
-Archived as: 2026-07-27-bundl-outage-feedback-round.md
-Repos touched: unconsult/no5pilot (seven claude/* branches, all merged to main and deleted: PRs #80, #84–#89)
+Archived as: 2026-07-29-ops-dashboard-round.md
+Repos touched: unconsult/no5pilot (PRs #104-#116, all merged to main)
 
 ## Where we left off
 
-Everything shipped and verified. The morning outage (Anthropic org monthly spend cap tripped at $50.19 against a $50 cap, blocking all of Richard's runs) is resolved: cap raised to $100, first successful run confirmed 07:05 BST, Healthchecks green. Seven PRs merged to main and deployed; production smoke test green on no5pilot.netlify.app with today's bundle confirmed live (form toggle + extraction warning present in served JS). Reply email to Richard drafted in Bontle's voice (final version asks which highlighting he means); she pastes and sends it herself. Memory (bundl-operational-state) updated with all of this.
+Thirteen PRs merged. Richard's worst bug (#75, ET1 race-discrimination box misread) and the whole Assessment of Claim complaint (#76, five points) are closed. Also closed: #71 edited badge, #69 wider isolation tests, #53 eval regression, and three stale Healthchecks alerts (#49/#73/#74) from the July spend-cap outage. The ops dashboard is regenerated at its usual URL with each open feedback item now naming what it waits on. Feedback log corrected twice (#109, #116) and now matches reality.
+
+Open user feedback is down to 4: #68 (decided and dated, being built), #77 module redesign, #83 highlighting, #82 chronology page-refs verification.
 
 ## Decisions made
 
-- Spend cap: raised $50 → $100 by Bontle; resets 1 Aug; standing policy question open.
-- Batch approved and merged (all seven): #80 honest billing-gate error, #84 chronology Full/Short, #85 participants Full/Short, #86 still-extracting run warning, #87 search expired-request re-sign gap, #88 assessment engagement rework + preliminary-hearing eval fixture, #89 feedback-log docs round.
-- BUILD NEXT (Bontle, end of session): Case Summary as a proper first-class module (currently dashboard-only widget), and Ask a Question (bundle-grounded lookup first).
-- HELD for a Richard + Emma + Bontle conversation: case law and legal principles module, opening note, written closing submissions, First Notes removal, Inconsistencies' place — the risky remainder of his nine-module redesign.
-- Highlighting: scoping waits on Richard's answer to the email question (mark-up-while-reading vs highlights feeding prep).
+- **#68 ask-a-question: BUILD IT.** Bundle-navigation half first, targeted w/c 10 Aug; case-law half held for the Richard + Emma conversation because of the no-invented-citations rule. Recorded on the issue. **Draft note to Richard written but NOT sent** (scratchpad, this session) — Bontle sends it.
+- **Em dash rule enforced deterministically** (Bontle chose "auto-correct after the model writes"). Dashes normalised to a hyphen after generation, before storage. The eval applies the same normalisation, so `test/editorial.test.js` is now what the eval check used to be for that rule.
+- **CI gained `workflow_dispatch`** after GitHub stopped delivering pull_request events for hours; nothing removed or relaxed.
+- Constraints register corrected: worst case is 4,000 pages not 2,000 (2,000 was Azure's per-request cap), and the 160,000-token input guard is now a named limit.
 
 ## What was tried
 
-- Outage diagnosed via the Anthropic Console (limits page, request log) and Healthchecks, not guesswork; the $50.19-vs-$50 arithmetic identified the tripped cap.
-- One branch per feedback item; stacked PRs (#85/#86/#88 on #84/#85) merged bottom-up. Every 2026-07-27 changelog line touches the same region, so each remaining PR needed main merged in and the conflict resolved before merging — expect this on any multi-PR day.
-- CI live eval passed on #88 with one stochastic retry (by design, per #52). Local qa loop runs dry-run tier only (no local ANTHROPIC_API_KEY).
+- #53 was NOT a quality regression. The judge was never told which side counsel acts for, so it marked correct cross-examination as targeting the wrong witnesses, and read the brief's required evidential-gap questions as fabrication. Fixed in #107; verified by a full judged eval, all green.
+- #76's authority half had a structural cause, not just wording: on bundles over ~320 pages the reduce path dropped AUTHORITIES entirely while still sending the prompt clause forbidding case law when none exist.
+- Live RLS deny tests dispatched against production: **24 checks, all passed**, covering matters, documents, module_outputs, usage_log and audit_events. The six RLS_TEST_* secrets have existed since 28 Jul — an earlier claim in this session that they were missing was wrong.
+- Concurrent-session collision: another window was working in the same checkout all day. #115 (theirs) added a worktree convention. Verified my #111 commit did NOT sweep their prompt edit (zero crossExamination lines).
 
 ## Open questions
 
-- Spend-cap policy and notify thresholds ($50/$75 partly fired; ~$50 headroom to 1 Aug).
-- Richard's highlighting answer; the three-way redesign conversation.
-- Upload-and-extract smoke needs a dedicated test account (owner decision parked). WIF conversion for CI reviewer still pending. ModuleNav hasBundle/hasSource prop-bug chip spawned, unactioned.
+- **Emma still has no GitHub access.** Verified: not in the org (Team plan, 1 of 2 seats used, so a seat is free), not on any repo, no pending invite. Path is the **People** tab, not Settings. Needs her username.
+- **#108** (auto-filed eval regression) is partly stale: em dash now fixed; one failure is a **false positive in the new `checkboxStateNotAsserted` criterion**, which wrongly failed correct hedged output ("If counsel's inspection of the ET1 reveals that further boxes were ticked..."). Task chip spawned. Third failure (preliminaryIssuesFocus) is pre-existing.
+- #70 deliberately part-open: unknown Azure error shapes still finalise, needs a live repro.
 
 ## Start here
 
-Build Case Summary via the /new-module (B2) loop: module-graph parity across src/lib/modules.js and netlify/functions/_modules.mjs, prompt in _prompts.mjs (UK English, no em dashes or ampersands), judge brief + eval wiring; decide its dependency (the dashboard summary currently builds from First Notes). Then Ask a Question: feasibility gate against docs/CONSTRAINTS.md FIRST (name the binding constraint; worst case ~331 MB, 2,000-page bundle), bundle-grounded scope, RLS + injection guard + its own eval; likely a /ralph slice. Update docs/feedback-log.md rows when each ships.
+**#68 build, bundle-navigation half.** The feasibility gate is done and merged (#114) and the design is on the issue: the naive design fails by 6.25x to 12.5x, so it must retrieve pages and never send the bundle. Binding constraints are the 160,000-token input guard and the 10 s synchronous function timeout.
+
+WIP already pushed on branch `claude/68-retrieval-wip`: `netlify/functions/_retrieval.mjs`, the pure page-scoring core, committed but not PR'd and imported by nothing. Still to build: the synchronous function with token verification and RLS-scoped document reads, the answer prompt carrying SOURCE_GUARD, citation rendering, the panel, and the eval fixture. One trap found: the citation click handler is bound to the centre column only, so a Q&A panel inside the source pane would not get citation clicks.
+
+Work in a git worktree, not the shared checkout (CLAUDE.md, added today).
